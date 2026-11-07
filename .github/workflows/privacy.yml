@@ -1,0 +1,10 @@
+name: privacy
+on:
+  push:
+  pull_request:
+jobs:
+  privacy-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: tools/privacy-check

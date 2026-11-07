@@ -1,0 +1,16 @@
+# Herdr session state and generated files: never published.
+.state/
+*.d.ts
+jsconfig.json
+settings.json
+view.json
+window.json
+windows.json
+shared.json
+seen.json
+installed.json
+telemetry/
+*.error
+.DS_Store
+# Generated at install time from tools/launchd/*.plist.template
+*.plist
