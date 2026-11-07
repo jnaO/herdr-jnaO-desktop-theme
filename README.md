@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/banner.svg" alt="jnaO herdr"></p>
+
 # herdr-jnaO-desktop-theme
 
 A desktop theme for the [Herdr](https://herdr.dev) app: the `jnaO` layout, its `jnao-*` mods, its own `jnaO` colour theme and a reference `keys.json`, plus tooling that re-applies the theme on top of every Herdr update.
@@ -13,6 +15,20 @@ tools/install
 ```
 
 `tools/install` copies the layout, mods, themes and `keys.json` into the Herdr home: `$HERDR_APP_HOME` if set, otherwise `~/.config/herdr-app`. It replaces the layout, the `jnao-*` mods and the `jnaO` colour theme, but never overwrites an existing `keys.json`; it prints what it skipped. The layout names `jnaO` as its colour theme in light and dark appearance, so it looks the same everywhere until you pick another theme in Settings. Then pick the layout in Herdr under Settings → Look → jnaO, or run `herdr-app do layout.switch --name jnaO`.
+
+<details>
+<summary><strong>On Windows</strong></summary>
+
+`tools/install` is a bash script, so on Windows copy the theme by hand. In PowerShell, from the cloned repo:
+
+```powershell
+$herdr = if ($env:HERDR_APP_HOME) { $env:HERDR_APP_HOME } else { "$HOME\.config\herdr-app" }
+Copy-Item -Recurse -Force layouts, mods, themes $herdr
+```
+
+This replaces the `jnaO` layout, the `jnao-*` mods and the `jnaO` colour theme, and leaves your `keys.json` alone; copy the repo's `keys.json` over by hand if you want its shortcuts. When updating, delete the `jnao-*` folders in `mods\` first so files removed from the theme don't linger. Then pick the layout as above. The update sync under [After a Herdr update](#after-a-herdr-update) is macOS-only.
+
+</details>
 
 To uninstall, delete `layouts/jnaO.json` and the `mods/jnao-*` folders from the Herdr home.
 
@@ -45,6 +61,33 @@ Each modified Herdr file starts with a line naming the Herdr mod it came from, a
 
 It writes `report.txt` next to the staging copy, listing merged files, conflicts, failed checks and new upstream code that opens Herdr's own framed menus. It exits 1 on any conflict or failed check. `--theirs <folder>` reads the shipped sources from another Herdr home, for rehearsals.
 
+`tools/sync` without `--dry-run` does the same and then acts on the result. It waits until Herdr has stopped writing its files for 5 seconds, and only one run happens at a time. The outcomes:
+
+| Outcome | What happens |
+|---|---|
+| nothing the theme was cloned from changed | nothing; no log line, no notification |
+| applied | the live theme is backed up, the merged mods and layout are swapped in and checked again, `upstream/` moves to the new Herdr version, `tools/export` runs and a local commit `Sync theme onto Herdr <version>` is made. Nothing is pushed: review and push it yourself. |
+| conflict, or check failed | the live theme is untouched; the staging copy and `report.txt` stay for you to look at |
+| rolled back | the merged theme failed its checks after going live, so the backup was put back |
+| blocked | the repo had uncommitted changes, so nothing was applied |
+
+Each outcome except the first appends a line to `sync.log` and posts a macOS notification. The log, the staging copy and the last five backups live in `${XDG_STATE_HOME:-~/.local/state}/herdr-jnaO-desktop-theme/`.
+
+### Running the sync automatically (macOS)
+
+```sh
+tools/install --watch     # install the theme and the launchd agent
+tools/install --unwatch   # remove the agent only
+```
+
+`--watch` installs a launchd agent that runs `tools/sync` whenever Herdr rewrites `installed.json`, which it does when it starts and when it updates. It fills `tools/launchd/sync.plist.template` with this repo's folder, the Herdr home and a `PATH` that finds `herdr-app`, `git` and `jq`, writes it to `~/Library/LaunchAgents/local.<repo folder>.sync.plist` and loads it. launchd runs it at most every 30 seconds. Run `--watch` again after moving the repo or reinstalling those tools. The agent's own output goes to `launchd.log` in the state folder below.
+
+The first notification may need you to allow notifications for Script Editor in System Settings → Notifications.
+
+### Recovering by hand
+
+To recover by hand after a conflict: resolve the conflict markers in the live mod (the staged file shows both sides), copy the matching Herdr source into `upstream/` with `tools/snapshot-upstream`, and commit. To go back to any earlier theme, copy a folder from `backups/` into the Herdr home's `mods/` and `layouts/`. `HERDR_SYNC_REHEARSE_FAILURE=1` makes a run fail after going live, to rehearse the rollback.
+
 ## Privacy gate
 
 The repo is public, so every commit passes `tools/privacy-check`. It fails when a file contains a home-folder path (macOS, Linux or Windows form), the value of `$HOME`, this machine's local hostname or the git user email. It does not look for the login name, because the theme's own `jnao-*` names would match it. The check runs:
@@ -52,6 +95,10 @@ The repo is public, so every commit passes `tools/privacy-check`. It fails when 
 - as a pre-commit hook: run `git config core.hooksPath tools/hooks` once after cloning;
 - in GitHub Actions on every push and pull request, where only the path forms apply;
 - by hand: `tools/privacy-check`.
+
+## Documentation
+
+Agent-facing docs: [`ARCHITECTURE.md`](ARCHITECTURE.md) is the map, and the [wiki](https://github.com/jnaO/herdr-jnaO-desktop-theme/wiki)'s **agent-docs** section has the drill-downs.
 
 ## Licence
 

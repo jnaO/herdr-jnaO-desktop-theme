@@ -4,6 +4,9 @@
 HERDR_HOME="${HERDR_APP_HOME:-$HOME/.config/herdr-app}"
 REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 
+# Where tools/sync keeps its log, staging copy, backups and lock.
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/herdr-jnaO-desktop-theme"
+
 # The theme is one layout; the mods and colour themes it ships are found by
 # following references from it.
 THEME_LAYOUT=jnaO

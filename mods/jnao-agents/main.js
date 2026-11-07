@@ -30,6 +30,14 @@ function toggleSidebar() {
 
 const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
 
+// A card's title: the session name the agent sets as its terminal title, else
+// the folder its pane is in. Titles that are paths or the bare program name don't count.
+function agentName(a, cwd) {
+  const t = clean(a.title);
+  const session = t && !/^[~/]|^[A-Za-z]:\\/.test(t) && t.toLowerCase() !== (a.program?.name ?? "").toLowerCase() ? t : "";
+  return session || (cwd ? cwd.replace(/\/+$/, "").split("/").pop() : "") || a.space_name || "";
+}
+
 function leadPanes(all) {
   const leads = new Map();
   for (const p of all) {
@@ -290,7 +298,9 @@ export default class Agents extends View {
     // agent's own title, never an automatic tab number unless two rows would
     // otherwise read the same.
     // Read the pane snapshot once: every host read copies the whole list into JS.
-    const leads = leadPanes(panes());
+    const ps = panes();
+    const leads = leadPanes(ps);
+    const cwdOf = new Map(ps.map((p) => [p.pane, p.cwd]));
     const tabLabels = new Map(spaces().flatMap(s => s.tabs).map(tab => [tab.id, title(tab, leads.get(tab.id))]));
     const labels = new Map(list.map(a => [a.address, tabLabels.get(a.tab) ?? (a.title || a.program?.name || "")]));
     const label = (a) => labels.get(a.address);
@@ -342,8 +352,8 @@ export default class Agents extends View {
       // Under a space header the space goes without saying; an automatic tab number says nothing.
       // Without a space header above (priority, pinned) the row names its space.
       // A card: app tile, then state icon and space name, and what it's on.
-      const name = a.space_name || label(a);
-      const sub = more ?? (a.program?.name || "");
+      const name = agentName(a, cwdOf.get(a.pane)) || label(a);
+      const sub = [a.space_name, more].filter((v) => v && v !== name).join(" \u00b7 ") || a.program?.name || "";
       const tagged = byPriority || isPinned;
       return h_flex()
         .id(`ag-${a.address}`)
