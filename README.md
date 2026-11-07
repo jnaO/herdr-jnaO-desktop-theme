@@ -45,6 +45,20 @@ Each modified Herdr file starts with a line naming the Herdr mod it came from, a
 
 It writes `report.txt` next to the staging copy, listing merged files, conflicts, failed checks and new upstream code that opens Herdr's own framed menus. It exits 1 on any conflict or failed check. `--theirs <folder>` reads the shipped sources from another Herdr home, for rehearsals.
 
+`tools/sync` without `--dry-run` does the same and then acts on the result. It waits until Herdr has stopped writing its files for 5 seconds, and only one run happens at a time. The outcomes:
+
+| Outcome | What happens |
+|---|---|
+| nothing the theme was cloned from changed | nothing; no log line, no notification |
+| applied | the live theme is backed up, the merged mods and layout are swapped in and checked again, `upstream/` moves to the new Herdr version, `tools/export` runs and a local commit `Sync theme onto Herdr <version>` is made. Nothing is pushed: review and push it yourself. |
+| conflict, or check failed | the live theme is untouched; the staging copy and `report.txt` stay for you to look at |
+| rolled back | the merged theme failed its checks after going live, so the backup was put back |
+| blocked | the repo had uncommitted changes, so nothing was applied |
+
+Each outcome except the first appends a line to `sync.log` and posts a macOS notification. The log, the staging copy and the last five backups live in `${XDG_STATE_HOME:-~/.local/state}/herdr-jnaO-desktop-theme/`.
+
+To recover by hand after a conflict: resolve the conflict markers in the live mod (the staged file shows both sides), copy the matching Herdr source into `upstream/` with `tools/snapshot-upstream`, and commit. To go back to any earlier theme, copy a folder from `backups/` into the Herdr home's `mods/` and `layouts/`. `HERDR_SYNC_REHEARSE_FAILURE=1` makes a run fail after going live, to rehearse the rollback.
+
 ## Privacy gate
 
 The repo is public, so every commit passes `tools/privacy-check`. It fails when a file contains a home-folder path (macOS, Linux or Windows form), the value of `$HOME`, this machine's local hostname or the git user email. It does not look for the login name, because the theme's own `jnao-*` names would match it. The check runs:

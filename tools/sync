@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Re-merges the theme onto a new Herdr release.
-#   tools/sync --dry-run [--theirs <home>]
+#   tools/sync [--dry-run] [--theirs <home>]
 # Compares the shipped sources' installed.json hashes with upstream/manifest.json
 # and exits 0 silently when nothing the theme was cloned from changed. Otherwise
 # it builds a staging copy of every theme mod and the layout: a 3-way merge of
@@ -8,7 +8,14 @@
 # then tools/radius, a cloned_from.version bump and herdr-app check. The live
 # Herdr home is only read. --theirs reads the shipped sources from another home
 # (a rehearsal copy) instead of the live one.
-# Exit: 0 unchanged or every merge clean and checked; 1 conflicts or failed checks.
+# Without --dry-run, a clean and checked result goes live: the live theme is
+# backed up, the staged mods and layout are swapped in and checked again (the
+# backup comes back if that fails), then upstream/ is advanced, tools/export
+# runs and a local commit is made. It never pushes. Every outcome other than
+# "nothing changed" is posted as a macOS notification and logged to sync.log.
+# HERDR_SYNC_REHEARSE_FAILURE=1 fails the live check on purpose (rehearsals).
+# Exit: 0 unchanged, or applied (or, with --dry-run, clean and checked);
+#       1 conflicts, failed checks or a rolled-back apply.
 set -eu
 . "$(dirname "$0")/lib.sh"
 need jq; need git; need rsync; need herdr-app
@@ -19,15 +26,40 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) dry_run=1 ;;
     --theirs) theirs_home=${2:?--theirs needs a folder}; shift ;;
-    *) die "usage: tools/sync --dry-run [--theirs <home>]" ;;
+    *) die "usage: tools/sync [--dry-run] [--theirs <home>]" ;;
   esac
   shift
 done
-[ "$dry_run" = 1 ] || die "only --dry-run is available"
 
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/herdr-jnaO-desktop-theme"
 manifest="$REPO_ROOT/upstream/manifest.json"
 [ -f "$manifest" ] || die "no upstream/manifest.json; run tools/snapshot-upstream first"
+mkdir -p "$STATE_DIR"
+log_file="$STATE_DIR/sync.log"
+
+# One run at a time; a second run while one is going does nothing.
+lock="$STATE_DIR/lock"
+mkdir "$lock" 2>/dev/null || exit 0
+trap 'rmdir "$lock" 2>/dev/null || true' EXIT
+
+# Outcome: a log line and, where possible, a macOS notification.
+announce() { # <outcome> <message>
+  echo "$(date '+%Y-%m-%d %H:%M:%S') $1 Herdr ${new_version:-?}: $2" >> "$log_file"
+  if command -v osascript >/dev/null 2>&1; then
+    osascript -e "display notification \"$2 Log: ${log_file/#$HOME/~}\" with title \"jnaO theme sync: $1\"" >/dev/null 2>&1 || true
+  fi
+}
+
+# Herdr writes its files over a moment when it starts or updates: wait until
+# installed.json and the shipped mods have been still for 5 seconds.
+newest_mtime() {
+  find "$@" -type f -exec stat -f %m {} + 2>/dev/null || find "$@" -type f -exec stat -c %Y {} + 2>/dev/null
+}
+for _ in $(seq 1 60); do
+  latest=$(newest_mtime "$theirs_home/installed.json" "$theirs_home/mods" | sort -n | tail -1)
+  [ $(( $(date +%s) - ${latest:-0} )) -ge 5 ] && break
+  sleep 1
+done
 
 # --- Did anything the theme was cloned from change? ---------------------------
 current=$(jq -S --argjson keys "$(jq '.hashes | keys' "$manifest")" \
@@ -163,4 +195,69 @@ fi
 rm -rf "$stage/.tmp"
 
 note "result: $conflicts conflict(s), $failures failed check(s); staging: ${stage/#$HOME/~}"
-[ "$conflicts" -eq 0 ] && [ "$failures" -eq 0 ]
+if [ "$dry_run" = 1 ]; then [ "$conflicts" -eq 0 ] && [ "$failures" -eq 0 ]; exit; fi
+
+if [ "$conflicts" -gt 0 ]; then
+  announce conflict "$conflicts file(s) conflict; the live theme is unchanged. See ${report/#$HOME/~}."
+  exit 1
+fi
+if [ "$failures" -gt 0 ]; then
+  announce "check failed" "$failures staged mod(s) failed herdr-app check; the live theme is unchanged. See ${report/#$HOME/~}."
+  exit 1
+fi
+if [ -n "$(git -C "$REPO_ROOT" status --porcelain)" ]; then
+  announce blocked "the repo has uncommitted changes; commit or stash them, then run tools/sync."
+  exit 1
+fi
+
+# --- Apply --------------------------------------------------------------------
+backup="$STATE_DIR/backups/$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$backup/mods" "$backup/layouts"
+for m in $mods; do cp -Rp "$HERDR_HOME/mods/$m" "$backup/mods/"; done
+cp -p "$HERDR_HOME/layouts/$THEME_LAYOUT.json" "$backup/layouts/"
+ls -1d "$STATE_DIR/backups"/*/ | sort -r | tail -n +6 | while read -r old; do rm -rf "$old"; done
+
+restore() {
+  local m
+  for m in $mods; do
+    rm -rf "$HERDR_HOME/mods/$m"
+    cp -Rp "$backup/mods/$m" "$HERDR_HOME/mods/"
+  done
+  cp -p "$backup/layouts/$THEME_LAYOUT.json" "$HERDR_HOME/layouts/"
+}
+
+mkdir -p "$stage/replaced"
+for m in $mods; do
+  # Herdr's generated editor files move across, so editors keep their types.
+  for g in "$HERDR_HOME/mods/$m"/*.d.ts "$HERDR_HOME/mods/$m/jsconfig.json"; do
+    [ -f "$g" ] && cp -p "$g" "$stage/mods/$m/"
+  done
+  mv "$HERDR_HOME/mods/$m" "$stage/replaced/$m"
+  mv "$stage/mods/$m" "$HERDR_HOME/mods/$m"
+done
+cp "$stage/layouts/$THEME_LAYOUT.json" "$HERDR_HOME/layouts/$THEME_LAYOUT.json"
+
+live_ok=1
+for m in $mods; do
+  if ! out=$(herdr-app check "$HERDR_HOME/mods/$m" 2>&1); then
+    live_ok=0; note "LIVE CHECK FAILED $m: $(echo "$out" | head -3 | tr '\n' ' ')"
+  fi
+done
+sleep 2 # hot reload
+if status=$(herdr-app status 2>/dev/null); then
+  errors=$(echo "$status" | jq -r '.errors | length' 2>/dev/null || echo 0)
+  [ "${errors:-0}" = 0 ] || { live_ok=0; note "herdr-app status reports errors: $(echo "$status" | jq -c .errors)"; }
+fi
+[ "${HERDR_SYNC_REHEARSE_FAILURE:-}" = 1 ] && { live_ok=0; note "rehearsed failure"; }
+
+if [ "$live_ok" = 0 ]; then
+  restore
+  announce "rolled back" "the merged theme failed after going live; the previous theme is restored from ${backup/#$HOME/~}."
+  exit 1
+fi
+
+"$REPO_ROOT/tools/snapshot-upstream" --from "$theirs_home" > /dev/null
+"$REPO_ROOT/tools/export" > /dev/null
+git -C "$REPO_ROOT" add -A
+git -C "$REPO_ROOT" commit -q -m "Sync theme onto Herdr $new_version"
+announce applied "the theme now runs on Herdr $new_version; commit ready to push."
