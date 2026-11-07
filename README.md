@@ -34,6 +34,17 @@ tools/export
 
 Each modified Herdr file starts with a line naming the Herdr mod it came from, as the Apache licence asks.
 
+## After a Herdr update
+
+`tools/sync --dry-run` re-merges the theme onto a new Herdr release without touching the Herdr home. It compares the shipped sources' hashes in Herdr's `installed.json` with `upstream/manifest.json` and exits silently when nothing the theme was cloned from changed. Otherwise it builds a staging copy under `${XDG_STATE_HOME:-~/.local/state}/herdr-jnaO-desktop-theme/staging/`:
+
+- each mod and the layout get a 3-way merge of the Herdr version they were cloned from (`upstream/`), the live theme, and the newly shipped Herdr source, after Herdr's own clone renames (`mods/<src>/` paths, self-opening overlay names) and the 2px corners are applied to the Herdr sides;
+- JSON files are merged with their keys sorted, because Herdr reorders keys when it clones;
+- new upstream files are added, files removed upstream are dropped unless the theme changed them, and the theme's own files are kept;
+- `cloned_from.version` is bumped and every staged mod goes through `herdr-app check`.
+
+It writes `report.txt` next to the staging copy, listing merged files, conflicts, failed checks and new upstream code that opens Herdr's own framed menus. It exits 1 on any conflict or failed check. `--theirs <folder>` reads the shipped sources from another Herdr home, for rehearsals.
+
 ## Privacy gate
 
 The repo is public, so every commit passes `tools/privacy-check`. It fails when a file contains a home-folder path (macOS, Linux or Windows form), the value of `$HOME`, this machine's local hostname or the git user email. It does not look for the login name, because the theme's own `jnao-*` names would match it. The check runs:

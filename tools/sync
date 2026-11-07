@@ -1,0 +1,166 @@
+#!/usr/bin/env bash
+# Re-merges the theme onto a new Herdr release.
+#   tools/sync --dry-run [--theirs <home>]
+# Compares the shipped sources' installed.json hashes with upstream/manifest.json
+# and exits 0 silently when nothing the theme was cloned from changed. Otherwise
+# it builds a staging copy of every theme mod and the layout: a 3-way merge of
+# base (upstream/), ours (the live clone) and theirs (the newly shipped source),
+# then tools/radius, a cloned_from.version bump and herdr-app check. The live
+# Herdr home is only read. --theirs reads the shipped sources from another home
+# (a rehearsal copy) instead of the live one.
+# Exit: 0 unchanged or every merge clean and checked; 1 conflicts or failed checks.
+set -eu
+. "$(dirname "$0")/lib.sh"
+need jq; need git; need rsync; need herdr-app
+
+dry_run=0
+theirs_home="$HERDR_HOME"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --dry-run) dry_run=1 ;;
+    --theirs) theirs_home=${2:?--theirs needs a folder}; shift ;;
+    *) die "usage: tools/sync --dry-run [--theirs <home>]" ;;
+  esac
+  shift
+done
+[ "$dry_run" = 1 ] || die "only --dry-run is available"
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/herdr-jnaO-desktop-theme"
+manifest="$REPO_ROOT/upstream/manifest.json"
+[ -f "$manifest" ] || die "no upstream/manifest.json; run tools/snapshot-upstream first"
+
+# --- Did anything the theme was cloned from change? ---------------------------
+current=$(jq -S --argjson keys "$(jq '.hashes | keys' "$manifest")" \
+  '. as $all | reduce $keys[] as $k ({}; .[$k] = $all[$k])' "$theirs_home/installed.json")
+[ "$current" = "$(jq -S .hashes "$manifest")" ] && exit 0
+
+new_version=$(jq -r '.last_run // empty' "$theirs_home/update-notes.json")
+[ -n "$new_version" ] || die "no Herdr version in $theirs_home/update-notes.json"
+
+stage="$STATE_DIR/staging"
+rm -rf "$stage"
+mkdir -p "$stage/base" "$stage/theirs" "$stage/mods" "$stage/layouts"
+report="$stage/report.txt"
+: > "$report"
+note() { echo "$*" | tee -a "$report"; }
+conflicts=0
+failures=0
+
+is_json() { case "$1" in *.json) return 0 ;; *) return 1 ;; esac; }
+
+# Herdr's clone rename, applied to a copy of a shipped mod so it lines up with
+# the clone: its own asset paths and its self-opening overlay name.
+rename_mod() { # <dir> <src> <clone>
+  local f
+  find "$1" -type f \( -name '*.js' -o -name '*.json' \) | while read -r f; do
+    sed -E -e "s#mods/$2/#mods/$3/#g" -e "s#mod: \"$2\"#mod: \"$3\"#g" "$f" > "$f.ren" && mv "$f.ren" "$f"
+  done
+}
+
+# JSON is merged with sorted keys: Herdr reorders keys when it clones.
+normalise() { # <file> -> stdout
+  if is_json "$1"; then jq -S . "$1"; else cat "$1"; fi
+}
+
+# One file, three sides; any side may be missing. Writes the result to <out>.
+merge_file() { # <rel> <base> <ours> <theirs> <out> <label>
+  local rel=$1 b=$2 o=$3 t=$4 out=$5 label=$6 tmp="$stage/.tmp"
+  mkdir -p "$tmp" "$(dirname "$out")"
+  for side in b o t; do
+    eval "p=\$$side"
+    if [ -f "$p" ]; then normalise "$p" > "$tmp/$side"; else rm -f "$tmp/$side"; fi
+  done
+  if [ ! -f "$tmp/o" ]; then
+    # Not in the clone: new upstream files arrive; files the clone deleted stay deleted.
+    [ -f "$tmp/t" ] && [ ! -f "$tmp/b" ] && cp "$t" "$out" && note "  added upstream: $label/$rel"
+    return 0
+  fi
+  if [ ! -f "$tmp/t" ]; then
+    if [ ! -f "$tmp/b" ]; then cp "$o" "$out"                              # the clone's own file
+    elif cmp -s "$tmp/o" "$tmp/b"; then note "  removed upstream: $label/$rel"
+    else cp "$o" "$out"; conflicts=$((conflicts + 1)); note "  CONFLICT $label/$rel: removed upstream, changed in the clone"
+    fi
+    return 0
+  fi
+  [ -f "$tmp/b" ] || : > "$tmp/b"
+  # Unchanged sides copy the original file; only real merges come out normalised.
+  if cmp -s "$tmp/t" "$tmp/b" || cmp -s "$tmp/o" "$tmp/t"; then cp "$o" "$out"; return 0; fi
+  if cmp -s "$tmp/o" "$tmp/b"; then cp "$t" "$out"; return 0; fi
+  if git merge-file -p -L "$label (theme)" -L "Herdr $(jq -r .version "$manifest")" -L "Herdr $new_version" \
+       "$tmp/o" "$tmp/b" "$tmp/t" > "$out"; then
+    note "  merged: $label/$rel"
+  else
+    conflicts=$((conflicts + 1)); note "  CONFLICT $label/$rel"
+  fi
+}
+
+merge_tree() { # <base dir> <ours dir> <theirs dir> <out dir> <label>
+  local rel
+  { (cd "$1" 2>/dev/null && find . -type f) ; (cd "$2" && find . -type f) ; (cd "$3" 2>/dev/null && find . -type f) ; } \
+    | grep -vE '\.d\.ts$|/jsconfig\.json$|/\.DS_Store$' | sed 's#^\./##' | sort -u | while read -r rel; do
+      merge_file "$rel" "$1/$rel" "$2/$rel" "$3/$rel" "$4/$rel" "$5"
+      echo "$conflicts" > "$stage/.tmp/conflicts"
+    done
+  [ -f "$stage/.tmp/conflicts" ] && conflicts=$(cat "$stage/.tmp/conflicts")
+}
+
+bump_version() { # <json file>
+  jq --arg v "$new_version" '.cloned_from.version = $v' "$1" > "$1.v" && mv "$1.v" "$1"
+}
+
+note "Herdr $(jq -r .version "$manifest") -> $new_version"
+mods=$(theme_mods "$HERDR_HOME")
+
+# --- Mods ---------------------------------------------------------------------
+for m in $mods; do
+  src=$(cloned_from "$HERDR_HOME/mods/$m/mod.json" name)
+  note "$m (from $src)"
+  for side in base theirs; do
+    from="$REPO_ROOT/upstream/mods/$src"; [ "$side" = theirs ] && from="$theirs_home/mods/$src"
+    if [ -d "$from" ]; then
+      rsync -a "${RSYNC_EXCLUDES[@]}" "$from/" "$stage/$side/$m/"
+      rename_mod "$stage/$side/$m" "$src" "$m"
+      # Corners on every side, so a radius-only difference never conflicts.
+      "$REPO_ROOT/tools/radius" "$stage/$side/$m" > /dev/null
+    fi
+  done
+  [ -d "$theirs_home/mods/$src" ] || note "  WARNING: Herdr no longer ships '$src'; keeping the clone as it is"
+  merge_tree "$stage/base/$m" "$HERDR_HOME/mods/$m" "$stage/theirs/$m" "$stage/mods/$m" "$m"
+  "$REPO_ROOT/tools/radius" "$stage/mods/$m" > /dev/null
+  bump_version "$stage/mods/$m/mod.json"
+  # New upstream openers of Herdr's framed menus (the theme routes its own to jnao-menu).
+  grep -hE 'openOverlay\(\{ *mod: "(menu|new-menu)"' "$stage/theirs/$m"/*.js 2>/dev/null | while read -r line; do
+    grep -qF "$line" "$stage/base/$m"/*.js 2>/dev/null || note "  WARNING: new upstream menu opener: $(echo "$line" | cut -c1-120)"
+  done
+done
+
+# --- Layout -------------------------------------------------------------------
+layout_src=$(cloned_from "$HERDR_HOME/layouts/$THEME_LAYOUT.json" name)
+note "layouts/$THEME_LAYOUT.json (from $layout_src)"
+map_mods() { # <layout file>: point mod refs at their clones
+  local f=$1 m src
+  for m in $mods; do
+    src=$(cloned_from "$HERDR_HOME/mods/$m/mod.json" name)
+    sed -E "s#\"mod\": *\"$src\"#\"mod\": \"$m\"#g" "$f" > "$f.map" && mv "$f.map" "$f"
+  done
+}
+cp "$REPO_ROOT/upstream/layouts/$layout_src.json" "$stage/base/layout.json"
+cp "$theirs_home/layouts/$layout_src.json" "$stage/theirs/layout.json"
+map_mods "$stage/base/layout.json"; map_mods "$stage/theirs/layout.json"
+merge_file "$THEME_LAYOUT.json" "$stage/base/layout.json" "$HERDR_HOME/layouts/$THEME_LAYOUT.json" \
+  "$stage/theirs/layout.json" "$stage/layouts/$THEME_LAYOUT.json" "layouts"
+[ -s "$stage/layouts/$THEME_LAYOUT.json" ] && jq -e . "$stage/layouts/$THEME_LAYOUT.json" > /dev/null 2>&1 \
+  && bump_version "$stage/layouts/$THEME_LAYOUT.json"
+
+# --- Check --------------------------------------------------------------------
+if [ "$conflicts" -eq 0 ]; then
+  for m in $mods; do
+    if ! out=$(herdr-app check "$stage/mods/$m" 2>&1); then
+      failures=$((failures + 1)); note "CHECK FAILED $m: $(echo "$out" | head -3 | tr '\n' ' ')"
+    fi
+  done
+fi
+rm -rf "$stage/.tmp"
+
+note "result: $conflicts conflict(s), $failures failed check(s); staging: ${stage/#$HOME/~}"
+[ "$conflicts" -eq 0 ] && [ "$failures" -eq 0 ]
