@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/banner.svg" alt="jnaO herdr"></p>
+
 # herdr-jnaO-desktop-theme
 
 A desktop theme for the [Herdr](https://herdr.dev) app: the `jnaO` layout, its `jnao-*` mods, its own `jnaO` colour theme and a reference `keys.json`, plus tooling that re-applies the theme on top of every Herdr update.
@@ -66,6 +68,10 @@ The repo is public, so every commit passes `tools/privacy-check`. It fails when 
 - as a pre-commit hook: run `git config core.hooksPath tools/hooks` once after cloning;
 - in GitHub Actions on every push and pull request, where only the path forms apply;
 - by hand: `tools/privacy-check`.
+
+## Documentation
+
+Agent-facing docs: [`ARCHITECTURE.md`](ARCHITECTURE.md) is the map, and the [wiki](https://github.com/jnaO/herdr-jnaO-desktop-theme/wiki)'s **agent-docs** section has the drill-downs.
 
 ## Licence
 
