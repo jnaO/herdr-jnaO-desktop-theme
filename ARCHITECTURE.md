@@ -27,10 +27,11 @@ upstream/                  unmodified Herdr sources the clones were built from =
 assets/banner.svg          README / wiki banner
 tools/lib.sh               shared paths and theme discovery; sourced by every tool
 tools/export               Herdr home → repo (mirror; version-guarded)
-tools/install              repo → Herdr home (keeps keys.json and foreign same-named themes)
+tools/install              repo → Herdr home (keeps keys.json and foreign same-named themes); --watch / --unwatch manage the launchd agent
 tools/snapshot-upstream    shipped sources → upstream/ (--from <home> for rehearsals)
 tools/radius               2px corner rule over mod .js files; idempotent
 tools/sync                 re-merge onto a new Herdr release; --dry-run stages only
+tools/launchd/sync.plist.template  launchd agent (WatchPaths installed.json → tools/sync); @PLACEHOLDER@s only, filled by install --watch
 tools/privacy-check        public-repo gate: path forms, $HOME, hostname, git email
 tools/hooks/pre-commit     runs privacy-check --staged (core.hooksPath tools/hooks)
 .github/workflows/privacy.yml  privacy-check on push and PR
@@ -43,6 +44,7 @@ LICENSE, NOTICE            Apache-2.0; NOTICE credits Herdr for mods/, layouts/,
 |---|---|
 | `HERDR_HOME` | `$HERDR_APP_HOME`, else `~/.config/herdr-app` |
 | `REPO_ROOT` | the repo, from the script's own location |
+| `STATE_DIR` | `${XDG_STATE_HOME:-~/.local/state}/herdr-jnaO-desktop-theme`: sync log, staging, backups, lock, launchd.log |
 | `THEME_LAYOUT` | the one place the theme name lives |
 | `theme_mods <home>` | every cloned mod reachable from the layout (layout refs, then `mod: "…"` refs inside mods) |
 | `theme_colors <home>` | colour themes the layout's `theme` names, minus Herdr presets |

@@ -73,6 +73,19 @@ It writes `report.txt` next to the staging copy, listing merged files, conflicts
 
 Each outcome except the first appends a line to `sync.log` and posts a macOS notification. The log, the staging copy and the last five backups live in `${XDG_STATE_HOME:-~/.local/state}/herdr-jnaO-desktop-theme/`.
 
+### Running the sync automatically (macOS)
+
+```sh
+tools/install --watch     # install the theme and the launchd agent
+tools/install --unwatch   # remove the agent only
+```
+
+`--watch` installs a launchd agent that runs `tools/sync` whenever Herdr rewrites `installed.json`, which it does when it starts and when it updates. It fills `tools/launchd/sync.plist.template` with this repo's folder, the Herdr home and a `PATH` that finds `herdr-app`, `git` and `jq`, writes it to `~/Library/LaunchAgents/local.<repo folder>.sync.plist` and loads it. launchd runs it at most every 30 seconds. Run `--watch` again after moving the repo or reinstalling those tools. The agent's own output goes to `launchd.log` in the state folder below.
+
+The first notification may need you to allow notifications for Script Editor in System Settings → Notifications.
+
+### Recovering by hand
+
 To recover by hand after a conflict: resolve the conflict markers in the live mod (the staged file shows both sides), copy the matching Herdr source into `upstream/` with `tools/snapshot-upstream`, and commit. To go back to any earlier theme, copy a folder from `backups/` into the Herdr home's `mods/` and `layouts/`. `HERDR_SYNC_REHEARSE_FAILURE=1` makes a run fail after going live, to rehearse the rollback.
 
 ## Privacy gate
