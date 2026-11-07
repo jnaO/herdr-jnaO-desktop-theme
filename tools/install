@@ -2,10 +2,57 @@
 # Copies the theme from the repo into the Herdr home. The layout, its mods and
 # its own colour theme (named like the layout) are replaced; any other colour
 # theme of the same name, and an existing keys.json, are kept.
+#   tools/install            copy the theme
+#   tools/install --watch    copy the theme, then install a launchd agent that
+#                            runs tools/sync whenever Herdr rewrites installed.json
+#   tools/install --unwatch  remove that launchd agent only
 set -eu
 . "$(dirname "$0")/lib.sh"
-need rsync
 
+LABEL="local.$(basename "$REPO_ROOT" | tr -c 'A-Za-z0-9.\n-' '-').sync"
+PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+DOMAIN="gui/$(id -u)"
+
+unwatch() {
+  launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
+  if [ -e "$PLIST" ]; then rm "$PLIST"; fi
+  echo "removed the launchd agent $LABEL"
+}
+
+xml_escape() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
+
+# launchd starts jobs with a bare PATH: put the folders of the tools sync needs
+# in front of the system one.
+job_path() {
+  local sys=/usr/bin:/bin:/usr/sbin:/sbin p="" t d
+  for t in herdr-app git jq; do
+    d=$(dirname "$(command -v "$t")")
+    case ":$p$sys:" in *":$d:"*) ;; *) p="$p$d:" ;; esac
+  done
+  echo "$p$sys"
+}
+
+watch() {
+  need launchctl; need herdr-app; need git; need jq
+  mkdir -p "$(dirname "$PLIST")" "$STATE_DIR"
+  T_LABEL=$(xml_escape "$LABEL") T_REPO_ROOT=$(xml_escape "$REPO_ROOT") \
+  T_HERDR_HOME=$(xml_escape "$HERDR_HOME") T_STATE_DIR=$(xml_escape "$STATE_DIR") \
+  T_PATH=$(xml_escape "$(job_path)") \
+    perl -pe 's/\@([A-Z_]+)\@/$ENV{"T_$1"}/g' "$REPO_ROOT/tools/launchd/sync.plist.template" > "$PLIST"
+  plutil -lint "$PLIST" > /dev/null || die "generated plist is invalid: $PLIST"
+  launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
+  launchctl bootstrap "$DOMAIN" "$PLIST"
+  echo "installed the launchd agent $LABEL: tools/sync runs when ${HERDR_HOME/#$HOME/~}/installed.json changes"
+}
+
+case "${1:-}" in
+  "") ;;
+  --watch) ;;
+  --unwatch) unwatch; exit 0 ;;
+  *) die "usage: tools/install [--watch | --unwatch]" ;;
+esac
+
+need rsync
 mkdir -p "$HERDR_HOME/mods" "$HERDR_HOME/layouts" "$HERDR_HOME/themes"
 for d in "$REPO_ROOT/mods"/*/; do
   m=$(basename "$d")
@@ -19,3 +66,6 @@ done
 if [ -e "$HERDR_HOME/keys.json" ]; then echo "skipped keys.json: already there (see the repo's keys.json to merge by hand)"
 else cp "$REPO_ROOT/keys.json" "$HERDR_HOME/"; fi
 echo "installed the $THEME_LAYOUT layout into ${HERDR_HOME/#$HOME/~}"
+
+[ "${1:-}" = --watch ] && watch
+exit 0

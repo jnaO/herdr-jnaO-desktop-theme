@@ -31,7 +31,6 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/herdr-jnaO-desktop-theme"
 manifest="$REPO_ROOT/upstream/manifest.json"
 [ -f "$manifest" ] || die "no upstream/manifest.json; run tools/snapshot-upstream first"
 mkdir -p "$STATE_DIR"

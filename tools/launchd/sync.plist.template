@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- tools/install --watch fills the @...@ placeholders and writes this to ~/Library/LaunchAgents/. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>@LABEL@</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>@REPO_ROOT@/tools/sync</string>
+  </array>
+  <key>WatchPaths</key>
+  <array>
+    <string>@HERDR_HOME@/installed.json</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>@PATH@</string>
+    <key>HERDR_APP_HOME</key>
+    <string>@HERDR_HOME@</string>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>@STATE_DIR@/launchd.log</string>
+  <key>StandardErrorPath</key>
+  <string>@STATE_DIR@/launchd.log</string>
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+</dict>
+</plist>
