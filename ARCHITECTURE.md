@@ -24,6 +24,8 @@ themes/jnaO.json           the layout's own colour theme (named like the layout)
 keys.json                  reference key bindings; install never overwrites the user's
 upstream/                  unmodified Herdr sources the clones were built from = merge base
   manifest.json            Herdr version + installed.json hashes of those sources
+RECIPE.md                  herdr.dev share brief (six sections, AGENTS.md order); build-from-scratch spec
+preview.png                herdr.dev share screenshot
 assets/banner.svg          README / wiki banner
 tools/lib.sh               shared paths and theme discovery; sourced by every tool
 tools/export               Herdr home → repo (mirror; version-guarded)
