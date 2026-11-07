@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Sets every mod-drawn corner to 2px: rewrites `.rounded(N)` with N >= 3 to
+# `.rounded(2)` in each .js file of the given mod folders. Safe to re-run.
+# Usage: tools/radius <mod dir>...
+set -eu
+
+# Rules, applied per line:
+#   skip status circles (a 6/7px dot or ring whose radius makes it round),
+#   skip the Herdr logo image,
+#   rounded_full / rounded_bl never match the rewrite.
+SKIP_CIRCLE='size\((6|7)\).*rounded\((3|4)\)'
+SKIP_LOGO='frame/welcome/herdr\.png'
+REWRITE='s/\.rounded\(([3-9]|[1-9][0-9]+)(\.[0-9]+)?\)/.rounded(2)/g'
+
+[ $# -gt 0 ] || { echo "usage: $0 <mod dir>..." >&2; exit 2; }
+for dir in "$@"; do
+  for f in "$dir"/*.js; do
+    [ -f "$f" ] || continue
+    sed -E -e "/$SKIP_CIRCLE/b" -e "\#$SKIP_LOGO#b" -e "$REWRITE" "$f" > "$f.radius"
+    if cmp -s "$f" "$f.radius"; then rm "$f.radius"; else mv "$f.radius" "$f"; echo "radius: $f"; fi
+  done
+done

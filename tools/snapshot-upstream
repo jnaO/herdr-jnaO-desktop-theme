@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Copies the shipped Herdr sources the theme was cloned from into upstream/,
+# with the Herdr version and their installed.json hashes in
+# upstream/manifest.json. These are the base the update sync merges against,
+# so run it only while the shipped sources still match the clones' version.
+set -eu
+. "$(dirname "$0")/lib.sh"
+need jq; need rsync
+
+version=$(jq -r '.last_run // empty' "$HERDR_HOME/update-notes.json")
+[ -n "$version" ] || die "no Herdr version in update-notes.json"
+
+layout_src=$(cloned_from "$HERDR_HOME/layouts/$THEME_LAYOUT.json" name)
+[ -n "$layout_src" ] || die "layouts/$THEME_LAYOUT.json is not a clone"
+[ "$(cloned_from "$HERDR_HOME/layouts/$THEME_LAYOUT.json" version)" = "$version" ] \
+  || die "layout was cloned from another Herdr version than the shipped $version"
+
+out="$REPO_ROOT/upstream"
+mkdir -p "$out/mods" "$out/layouts"
+srcs=""
+for m in $(theme_mods "$HERDR_HOME"); do
+  src=$(cloned_from "$HERDR_HOME/mods/$m/mod.json" name)
+  [ "$(cloned_from "$HERDR_HOME/mods/$m/mod.json" version)" = "$version" ] \
+    || die "mods/$m was cloned from another Herdr version than the shipped $version"
+  rsync -a --delete "${RSYNC_EXCLUDES[@]}" "$HERDR_HOME/mods/$src/" "$out/mods/$src/"
+  srcs="$srcs $src"
+done
+for d in "$out/mods"/*/; do
+  case " $srcs " in *" $(basename "$d") "*) ;; *) rm -rf "$d" ;; esac
+done
+cp "$HERDR_HOME/layouts/$layout_src.json" "$out/layouts/"
+
+keys=$(printf '%s\n' $srcs "layout:$layout_src" | jq -R . | jq -s .)
+jq --arg v "$version" --argjson keys "$keys" \
+  '{version: $v, hashes: (. as $all | reduce $keys[] as $k ({}; .[$k] = $all[$k]))}' \
+  "$HERDR_HOME/installed.json" > "$out/manifest.json"
+echo "upstream/ now holds Herdr $version sources:$srcs layouts/$layout_src.json"

@@ -1,0 +1,14 @@
+herdr-jnaO-desktop-theme
+
+This repository contains files derived from, and modified from, Herdr
+(https://herdr.dev), which is licensed under the Apache License, Version 2.0.
+
+- mods/jnao-*/ are modified copies of Herdr's shipped mods. Each modified
+  JavaScript file starts with a line naming the Herdr mod it came from.
+- layouts/jnaO.json is a modified copy of Herdr's "main" layout.
+- upstream/ holds unmodified copies of the Herdr sources those files were
+  built from, kept as the base for re-merging after Herdr updates.
+
+mods/jnao-spaces/machine.js and mods/jnao-agents/machine.js, themes/ and
+tools/ are original work in this repository, also offered under the Apache
+License, Version 2.0. See LICENSE.

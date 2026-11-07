@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Fails (exit 1) when a file that would be published contains a machine path
+# or this machine's identity. Usage:
+#   tools/privacy-check            tracked + untracked (not ignored) files
+#   tools/privacy-check --staged   the index, as the pre-commit hook sees it
+# In CI ($CI set) only the generic path forms apply.
+set -eu
+
+root=$(cd "$(dirname "$0")/.." && pwd)
+cd "$root"
+
+# Built from fragments so this file never matches its own patterns.
+patterns=("/Us""ers/" "/ho""me/" 'C:\Us''ers\')
+if [ -z "${CI:-}" ]; then
+  [ -n "${HOME:-}" ] && patterns+=("$HOME")
+  host=$(scutil --get LocalHostName 2>/dev/null || hostname -s 2>/dev/null || true)
+  [ -n "$host" ] && patterns+=("$host")
+  email=$(git config user.email 2>/dev/null || true)
+  [ -n "$email" ] && patterns+=("$email")
+fi
+
+args=()
+for p in "${patterns[@]}"; do args+=(-e "$p"); done
+
+case "${1:-}" in
+  --staged) scope=(--cached) ;;
+  "") scope=(--untracked) ;;
+  *) echo "usage: $0 [--staged]" >&2; exit 2 ;;
+esac
+
+if git grep -n -I -F -i "${scope[@]}" "${args[@]}" -- . ':!tools/privacy-check'; then
+  echo "privacy-check: the lines above contain a machine path or identity; remove them before committing." >&2
+  exit 1
+fi
+echo "privacy-check: clean"
