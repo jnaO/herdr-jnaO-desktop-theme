@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Mirrors the theme from the Herdr home into the repo: the layout, every cloned
-# mod it uses, the colour themes and keys.json. Generated files are skipped and
+# mod and colour theme it uses, and keys.json. Generated files are skipped and
 # files deleted in the home are deleted here.
 set -eu
 . "$(dirname "$0")/lib.sh"
@@ -16,6 +16,11 @@ for f in "$HERDR_HOME/layouts/$THEME_LAYOUT.json" $(for m in $mods; do echo "$HE
   [ "$v" = "$version" ] || die "${f#$HERDR_HOME/} was cloned from Herdr $v, upstream/ holds $version"
 done
 
+colors=$(theme_colors "$HERDR_HOME")
+for t in $colors; do
+  [ -f "$HERDR_HOME/themes/$t.json" ] || die "the layout uses colour theme '$t', but themes/$t.json is missing"
+done
+
 mkdir -p "$REPO_ROOT/mods" "$REPO_ROOT/layouts" "$REPO_ROOT/themes"
 for m in $mods; do
   rsync -a --delete "${RSYNC_EXCLUDES[@]}" "$HERDR_HOME/mods/$m/" "$REPO_ROOT/mods/$m/"
@@ -25,6 +30,10 @@ for d in "$REPO_ROOT/mods"/*/; do
   case " $mods " in *" $(basename "$d") "*) ;; *) rm -rf "$d" ;; esac
 done
 cp "$HERDR_HOME/layouts/$THEME_LAYOUT.json" "$REPO_ROOT/layouts/"
-for t in $THEME_COLORS; do cp "$HERDR_HOME/themes/$t.json" "$REPO_ROOT/themes/"; done
+for f in "$REPO_ROOT"/themes/*.json; do
+  [ -f "$f" ] || continue
+  case " $(echo $colors) " in *" $(basename "$f" .json) "*) ;; *) rm "$f" ;; esac
+done
+for t in $colors; do cp "$HERDR_HOME/themes/$t.json" "$REPO_ROOT/themes/"; done
 cp "$HERDR_HOME/keys.json" "$REPO_ROOT/keys.json"
-echo "exported layouts/$THEME_LAYOUT.json, mods: $mods"
+echo "exported layouts/$THEME_LAYOUT.json, themes: $(echo $colors), mods: $mods"

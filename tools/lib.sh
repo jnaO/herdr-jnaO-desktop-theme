@@ -4,10 +4,12 @@
 HERDR_HOME="${HERDR_APP_HOME:-$HOME/.config/herdr-app}"
 REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 
-# The theme: one layout, the colour themes it ships, and everything else it
-# needs is found by following mod references from the layout.
+# The theme is one layout; the mods and colour themes it ships are found by
+# following references from it.
 THEME_LAYOUT=jnaO
-THEME_COLORS="ghostty tokyo-night"
+
+# Herdr's built-in colour themes: never shipped as files.
+HERDR_PRESETS="graphite ink moss paper"
 
 # Herdr-generated files inside a mod folder; never copied.
 RSYNC_EXCLUDES=(--exclude '*.d.ts' --exclude 'jsconfig.json' --exclude '.DS_Store')
@@ -21,6 +23,15 @@ cloned_from() { jq -r --arg f "$2" '.cloned_from[$f] // empty' "$1" 2>/dev/null;
 
 # Mod names referenced from stdin: "mod": "x", mod: "x", "terminal_menu": "x".
 mod_refs() { grep -oE '("mod"|mod|"terminal_menu") *: *"[^"]+"' | sed -E 's/.*"([^"]+)"$/\1/'; }
+
+# Colour theme files the layout's root "theme" names (a name or {light, dark}).
+theme_colors() {
+  local n
+  for n in $(jq -r '.theme | if type == "object" then .[] elif type == "string" then . else empty end' \
+      "$1/layouts/$THEME_LAYOUT.json" | sort -u); do
+    case " $HERDR_PRESETS " in *" $n "*) ;; *) echo "$n" ;; esac
+  done
+}
 
 # Every cloned mod the theme layout uses, directly or through another such mod.
 theme_mods() {

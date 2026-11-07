@@ -1,6 +1,6 @@
 # herdr-jnaO-desktop-theme
 
-A desktop theme for the [Herdr](https://herdr.dev) app: the `jnaO` layout, its `jnao-*` mods, the `ghostty` and `tokyo-night` colour themes and a reference `keys.json`, plus tooling that re-applies the theme on top of every Herdr update.
+A desktop theme for the [Herdr](https://herdr.dev) app: the `jnaO` layout, its `jnao-*` mods, its own `jnaO` colour theme and a reference `keys.json`, plus tooling that re-applies the theme on top of every Herdr update.
 
 The repo is laid out like the Herdr home folder, so `layouts/`, `mods/` and `themes/` can be copied straight into it. Tooling lives in `tools/` and the Herdr sources the mods were built from live in `upstream/`; neither is part of the theme itself.
 
@@ -12,7 +12,7 @@ cd herdr-jnaO-desktop-theme
 tools/install
 ```
 
-`tools/install` copies the layout, mods, themes and `keys.json` into the Herdr home: `$HERDR_APP_HOME` if set, otherwise `~/.config/herdr-app`. It replaces the layout and the `jnao-*` mods, but never overwrites an existing `keys.json` or a colour theme of the same name; it prints what it skipped. Then pick the layout in Herdr under Settings → Look → jnaO, or run `herdr-app do layout.switch --name jnaO`.
+`tools/install` copies the layout, mods, themes and `keys.json` into the Herdr home: `$HERDR_APP_HOME` if set, otherwise `~/.config/herdr-app`. It replaces the layout, the `jnao-*` mods and the `jnaO` colour theme, but never overwrites an existing `keys.json`; it prints what it skipped. The layout names `jnaO` as its colour theme in light and dark appearance, so it looks the same everywhere until you pick another theme in Settings. Then pick the layout in Herdr under Settings → Look → jnaO, or run `herdr-app do layout.switch --name jnaO`.
 
 To uninstall, delete `layouts/jnaO.json` and the `mods/jnao-*` folders from the Herdr home.
 
@@ -26,7 +26,7 @@ Edit the mods in the Herdr home, where Herdr reloads them as you save, then copy
 tools/export
 ```
 
-`tools/export` mirrors the theme from the Herdr home into the repo: the `jnaO` layout, every cloned mod it uses (directly, or opened by another theme mod), the colour themes and `keys.json`. It leaves out files Herdr generates (`*.d.ts`, `jsconfig.json`), and a file deleted in the Herdr home is deleted in the repo. It refuses to run when a mod was cloned from a different Herdr version than the one in `upstream/manifest.json`.
+`tools/export` mirrors the theme from the Herdr home into the repo: the `jnaO` layout, every cloned mod it uses (directly, or opened by another theme mod), the colour themes its `theme` field names (Herdr's built-in themes excepted) and `keys.json`. It leaves out files Herdr generates (`*.d.ts`, `jsconfig.json`), and a file deleted in the Herdr home is deleted in the repo. It refuses to run when a mod was cloned from a different Herdr version than the one in `upstream/manifest.json`.
 
 `tools/snapshot-upstream` copies the shipped Herdr sources the theme was cloned from into `upstream/`, and records the Herdr version and their file hashes in `upstream/manifest.json`. Those sources are the base the update sync merges against.
 
