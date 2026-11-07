@@ -1,0 +1,93 @@
+{
+  "version": "0.1.13",
+  "hashes": {
+    "workspace-chrome": {
+      "archive.svg": "2cce972bb43c2514",
+      "branch.svg": "af053a46f40e1c6c",
+      "check.svg": "a6dd58e3111b8d18",
+      "chevron-down.svg": "43b9f11a785c8653",
+      "chevron-left.svg": "8e9a032e4948d93f",
+      "chevron-right.svg": "7867764fc431794c",
+      "circle-check.svg": "6ddf9a07d6108f72",
+      "clock.svg": "9b89a8be2e490bb6",
+      "file-text.svg": "10c4327225ab8285",
+      "files.svg": "f5f18b5ce84aabdd",
+      "folder-plus.svg": "566ae42bf54349de",
+      "folder.svg": "64e7b5165472b129",
+      "git-branch.svg": "4755be35a17a666b",
+      "git-compare.svg": "695c80dd79512403",
+      "layers.svg": "10b2f6a8868f3320",
+      "main.js": "411dacc4a3d5d26f",
+      "minus.svg": "9f34bc47ac7d5194",
+      "mod.json": "433fbf9dfa3e359a",
+      "monitor.svg": "dfa84aaf3437b005",
+      "panel-left.svg": "4ac40d4f8fb48066",
+      "panel-right.svg": "58f39adf86d954d9",
+      "pin-off.svg": "7a8c130e50675238",
+      "pin.svg": "164319cfd4d68176",
+      "plus.svg": "780626bfae0a5bdd",
+      "search.svg": "fc64c93fad23ffea",
+      "server.svg": "f53e311668439044",
+      "settings.svg": "be23996087281eb3",
+      "sidebar.svg": "e85663fd6dd097bd",
+      "spinner.svg": "84f48aa9264eaa66",
+      "square-pen.svg": "7e31c374f3deb0d1",
+      "square.svg": "119c2ae8c3e90312",
+      "terminal.svg": "d2bb218585aa7191",
+      "x.svg": "b371ad85aff6b5ff"
+    },
+    "spaces": {
+      "main.js": "829379c2a6776f3e",
+      "mod.json": "4a42ed2202338077"
+    },
+    "agents": {
+      "main.js": "b574e15d7b0f15e5",
+      "mod.json": "c1d087260ba7b076"
+    },
+    "tabs": {
+      "main.js": "7e5362914f6154d5",
+      "mod.json": "a504d5ac991bc4cc",
+      "win-close.svg": "ca74932a6d3f1a90",
+      "win-max.svg": "4bbb4fb6a79ab51d",
+      "win-min.svg": "b86a99b42001e95f",
+      "win-restore.svg": "188630362d9549bf"
+    },
+    "pane": {
+      "close.svg": "a5b3c4e8f1b96e70",
+      "main.js": "f986585391c53ade",
+      "mod.json": "100e8915b26fb6b1",
+      "split-down.svg": "5fb017357dcb7d15",
+      "split-right.svg": "3f66f78fb7e964b4",
+      "unzoom.svg": "00b7ef24094e3955",
+      "zoom.svg": "4b2c0cf1547241c1"
+    },
+    "files": {
+      "chevron-down.svg": "43b9f11a785c8653",
+      "chevron-right.svg": "7867764fc431794c",
+      "file.svg": "316c5ba4beaebfe1",
+      "folder.svg": "64e7b5165472b129",
+      "main.js": "95e3448d12d57c8c",
+      "mod.json": "433fbf9dfa3e359a"
+    },
+    "changes": {
+      "changes.svg": "8a5b4c45adcb0ef1",
+      "main.js": "b00568f69f7b7ff9",
+      "mod.json": "433fbf9dfa3e359a"
+    },
+    "workspace-status": {
+      "main.js": "fd4655b33806d999",
+      "mod.json": "433fbf9dfa3e359a"
+    },
+    "menu": {
+      "main.js": "71e2d915a0dc1976",
+      "mod.json": "433fbf9dfa3e359a"
+    },
+    "new-menu": {
+      "main.js": "163ca2db28639df5",
+      "mod.json": "433fbf9dfa3e359a"
+    },
+    "layout:main": {
+      "json": "d25b961ea961fba1"
+    }
+  }
+}
