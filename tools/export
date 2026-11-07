@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Mirrors the theme from the Herdr home into the repo: the layout, every cloned
+# mod it uses, the colour themes and keys.json. Generated files are skipped and
+# files deleted in the home are deleted here.
+set -eu
+. "$(dirname "$0")/lib.sh"
+need jq; need rsync
+
+manifest="$REPO_ROOT/upstream/manifest.json"
+[ -f "$manifest" ] || die "no upstream/manifest.json; run tools/snapshot-upstream first"
+version=$(jq -r .version "$manifest")
+
+mods=$(theme_mods "$HERDR_HOME")
+for f in "$HERDR_HOME/layouts/$THEME_LAYOUT.json" $(for m in $mods; do echo "$HERDR_HOME/mods/$m/mod.json"; done); do
+  v=$(cloned_from "$f" version)
+  [ "$v" = "$version" ] || die "${f#$HERDR_HOME/} was cloned from Herdr $v, upstream/ holds $version"
+done
+
+mkdir -p "$REPO_ROOT/mods" "$REPO_ROOT/layouts" "$REPO_ROOT/themes"
+for m in $mods; do
+  rsync -a --delete "${RSYNC_EXCLUDES[@]}" "$HERDR_HOME/mods/$m/" "$REPO_ROOT/mods/$m/"
+done
+for d in "$REPO_ROOT/mods"/*/; do
+  [ -d "$d" ] || continue
+  case " $mods " in *" $(basename "$d") "*) ;; *) rm -rf "$d" ;; esac
+done
+cp "$HERDR_HOME/layouts/$THEME_LAYOUT.json" "$REPO_ROOT/layouts/"
+for t in $THEME_COLORS; do cp "$HERDR_HOME/themes/$t.json" "$REPO_ROOT/themes/"; done
+cp "$HERDR_HOME/keys.json" "$REPO_ROOT/keys.json"
+echo "exported layouts/$THEME_LAYOUT.json, mods: $mods"

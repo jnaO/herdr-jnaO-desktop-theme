@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Copies the theme from the repo into the Herdr home. The layout and mods are
+# replaced; an existing keys.json or colour theme of the same name is kept.
+set -eu
+. "$(dirname "$0")/lib.sh"
+need rsync
+
+mkdir -p "$HERDR_HOME/mods" "$HERDR_HOME/layouts" "$HERDR_HOME/themes"
+for d in "$REPO_ROOT/mods"/*/; do
+  m=$(basename "$d")
+  rsync -a --delete "${RSYNC_EXCLUDES[@]}" "$d" "$HERDR_HOME/mods/$m/"
+done
+cp "$REPO_ROOT/layouts/$THEME_LAYOUT.json" "$HERDR_HOME/layouts/"
+for f in "$REPO_ROOT"/themes/*.json; do
+  if [ -e "$HERDR_HOME/themes/$(basename "$f")" ]; then echo "skipped themes/$(basename "$f"): already there"
+  else cp "$f" "$HERDR_HOME/themes/"; fi
+done
+if [ -e "$HERDR_HOME/keys.json" ]; then echo "skipped keys.json: already there (see the repo's keys.json to merge by hand)"
+else cp "$REPO_ROOT/keys.json" "$HERDR_HOME/"; fi
+echo "installed the $THEME_LAYOUT layout into ${HERDR_HOME/#$HOME/~}"
