@@ -16,6 +16,20 @@ tools/install
 
 `tools/install` copies the layout, mods, themes and `keys.json` into the Herdr home: `$HERDR_APP_HOME` if set, otherwise `~/.config/herdr-app`. It replaces the layout, the `jnao-*` mods and the `jnaO` colour theme, but never overwrites an existing `keys.json`; it prints what it skipped. The layout names `jnaO` as its colour theme in light and dark appearance, so it looks the same everywhere until you pick another theme in Settings. Then pick the layout in Herdr under Settings → Look → jnaO, or run `herdr-app do layout.switch --name jnaO`.
 
+<details>
+<summary><strong>On Windows</strong></summary>
+
+`tools/install` is a bash script, so on Windows copy the theme by hand. In PowerShell, from the cloned repo:
+
+```powershell
+$herdr = if ($env:HERDR_APP_HOME) { $env:HERDR_APP_HOME } else { "$HOME\.config\herdr-app" }
+Copy-Item -Recurse -Force layouts, mods, themes $herdr
+```
+
+This replaces the `jnaO` layout, the `jnao-*` mods and the `jnaO` colour theme, and leaves your `keys.json` alone; copy the repo's `keys.json` over by hand if you want its shortcuts. When updating, delete the `jnao-*` folders in `mods\` first so files removed from the theme don't linger. Then pick the layout as above. The update sync under [After a Herdr update](#after-a-herdr-update) is macOS-only.
+
+</details>
+
 To uninstall, delete `layouts/jnaO.json` and the `mods/jnao-*` folders from the Herdr home.
 
 The tools need bash, git, rsync and jq, which current macOS ships with.
