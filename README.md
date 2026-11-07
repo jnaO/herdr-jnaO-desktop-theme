@@ -30,6 +30,8 @@ tools/export
 
 `tools/snapshot-upstream` copies the shipped Herdr sources the theme was cloned from into `upstream/`, and records the Herdr version and their file hashes in `upstream/manifest.json`. Those sources are the base the update sync merges against.
 
+`tools/radius <mod dir>...` sets every corner the mods draw to 2px: it rewrites `.rounded(N)` with N of 3 or more to `.rounded(2)`, leaving status dots, rings and the Herdr logo round. Running it again changes nothing.
+
 Each modified Herdr file starts with a line naming the Herdr mod it came from, as the Apache licence asks.
 
 ## Privacy gate
