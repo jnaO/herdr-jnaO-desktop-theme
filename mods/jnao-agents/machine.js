@@ -25,11 +25,11 @@ export function machineIcon(name, size, t) {
 }
 
 // Icon, upper-case name, a rule in the machine's tint, then `trailing` elements.
-// Collapsed: the icon alone, centred.
-export function machineHeader(id, name, t, { collapsed = false, trailing = [] } = {}) {
+// Collapsed: the icon alone, centred, with `badge` (an absolutely placed element) over it.
+export function machineHeader(id, name, t, { collapsed = false, trailing = [], badge = null } = {}) {
   const color = machineColor(name, t);
   const head = h_flex().id(id).h(32).flex_none().items_center().gap(8);
-  if (collapsed) return head.justify_center().child(machineIcon(name, 17, t));
+  if (collapsed) return head.justify_center().child(badge ? div().relative().flex_none().child(machineIcon(name, 17, t)).child(badge) : machineIcon(name, 17, t));
   return head.px(6)
     .child(machineIcon(name, 17, t))
     .child(div().flex_none().max_w(150).truncate().text_size(11.5).font_semibold().text_color(color).child((name ?? "This computer").toUpperCase()))
