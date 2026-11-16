@@ -11,7 +11,9 @@
 # compatible when <herdr> is not newer than update-notes.json .last_run; a
 # newer one is held, with one notification per held tag. Installing backs up
 # the live theme, runs tools/install from the release's own tree, then the live
-# check; a failure restores the backup and skips that release.
+# check; a failure restores the backup and skips that release. Each outcome is
+# logged to update.log and written to <Herdr home>/.jnao-theme/update.json,
+# which jnao-workspace-status shows as a toast.
 # HERDR_UPDATE_REHEARSE_FAILURE=1 fails the live check on purpose (rehearsals).
 # Exit: 0 nothing new, installed or held; 1 blocked, rolled back or failed.
 set -eu
@@ -23,7 +25,20 @@ log_file="$STATE_DIR/update.log"
 
 take_lock || exit 0
 
-announce() { notify "$log_file" "$1" "$2" "$3"; } # <outcome> <subject> <message>
+events="$HERDR_HOME/.jnao-theme"
+
+# Outcome: an update.log line and the event file jnao-workspace-status toasts.
+# The event holds the outcome, a tag, a Herdr version and a fixed reason code only.
+announce() { # <outcome> <tag> <message> [<reason>]
+  local tag=$2 subject=${2:-${4:-?}} release_url=""
+  log_outcome "$log_file" "$1" "$subject" "$3"
+  case "${url:-}" in https://github.com/*) [ -z "$tag" ] || release_url="${url%.git}/releases/tag/$tag" ;; esac
+  mkdir -p "$events"
+  jq -n --arg id "$(date +%s)-${1// /-}-$tag" --arg outcome "$1" --arg tag "$tag" \
+    --arg herdr "${tag:+$(tag_version "$tag")}" --arg url "$release_url" --arg reason "${4:-}" \
+    '{id: $id, outcome: $outcome, tag: $tag, herdr: $herdr, url: $url, reason: $reason}' > "$events/.update.json.tmp"
+  mv "$events/.update.json.tmp" "$events/update.json"
+}
 git_() { git -C "$REPO_ROOT" "$@"; }
 tag_version() { local v=${1#v}; echo "${v%-r*}"; }
 version_le() { [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -1)" = "$1" ]; }
@@ -38,7 +53,8 @@ if [ "${1:-}" = --rollback ]; then
   restore_theme "$backup"
   cat "$backup/release" > "$STATE_DIR/release" 2>/dev/null || : > "$STATE_DIR/release"
   if [ -n "$from" ]; then echo "$from" > "$STATE_DIR/skip"; fi
-  announce "rolled back" "${from:-?}" "the theme from ${backup/#$HOME/~} is back${from:+; $from is skipped until a newer release}."
+  log_outcome "$log_file" "rolled back" "${from:-?}" "by hand, to ${backup/#$HOME/~}"
+  echo "the theme from ${backup/#$HOME/~} is back${from:+; $from is skipped until a newer release}"
   exit 0
 fi
 [ $# -eq 0 ] || die "usage: tools/update [--rollback]"
@@ -52,13 +68,13 @@ case "$url" in https://github.com/*) url="${url%.git}.git" ;; esac
 
 if ! out=$(git_ fetch --quiet --no-tags --prune "$url" "+HEAD:$NS/head" "+refs/tags/*:$NS/tags/*" 2>&1); then
   echo "$out" >&2
-  announce failed "fetch" "could not fetch releases from $url; nothing changed."
+  announce failed "" "could not fetch releases; nothing changed." fetch
   exit 1
 fi
 
 client=$(jq -r '.last_run // empty' "$HERDR_HOME/update-notes.json" 2>/dev/null || true)
 if [ -z "$client" ]; then
-  announce blocked "Herdr ?" "no Herdr version in ${HERDR_HOME/#$HOME/~}/update-notes.json; start Herdr once, then run tools/update."
+  announce blocked "" "no Herdr version in update-notes.json; start Herdr once, then run tools/update." no-herdr-version
   exit 1
 fi
 
@@ -79,16 +95,18 @@ if [ -z "$candidate" ] || [ "$candidate" = "$installed" ] || [ "$candidate" = "$
 
 commit=$(git_ rev-parse --verify --quiet "$NS/tags/$candidate^{commit}")
 if [ -n "$(git_ status --porcelain)" ]; then
-  announce blocked "$candidate" "the clone has uncommitted changes; commit or stash them, then run tools/update."
+  announce blocked "$candidate" "the clone has uncommitted changes; commit or stash them, then run tools/update." dirty
   exit 1
 fi
 if git_ merge-base --is-ancestor HEAD "$commit"; then
   git_ merge --ff-only --quiet "$commit"
 elif ! git_ merge-base --is-ancestor "$commit" HEAD; then
-  announce blocked "$candidate" "the clone has commits that $candidate does not; reset it to origin, then run tools/update."
+  announce blocked "$candidate" "the clone has commits that $candidate does not; reset it to origin, then run tools/update." diverged
   exit 1
 fi
 
+# The folder exists before install, so the reloaded mod's watch sees the event.
+mkdir -p "$events"
 tree="$STATE_DIR/release-tree"
 rm -rf "$tree"; mkdir -p "$tree"
 # -m: archived files carry the commit time; fresh mtimes keep install's rsync

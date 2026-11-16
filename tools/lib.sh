@@ -60,10 +60,12 @@ take_lock() {
   trap 'rmdir "$STATE_DIR/lock" 2>/dev/null || true' EXIT
 }
 
+log_outcome() { echo "$(date '+%Y-%m-%d %H:%M:%S') $2 $3: $4" >> "$1"; } # <log> <outcome> <subject> <message>
+
 # Outcome: a log line and, where possible, a macOS notification titled
 # "jnaO theme <tool>: <outcome>".
 notify() { # <log> <outcome> <subject> <message>
-  echo "$(date '+%Y-%m-%d %H:%M:%S') $2 $3: $4" >> "$1"
+  log_outcome "$@"
   if command -v osascript >/dev/null 2>&1; then
     osascript -e "display notification \"$4 Log: ${1/#$HOME/~}\" with title \"jnaO theme $(basename "$0"): $2\"" >/dev/null 2>&1 || true
   fi
