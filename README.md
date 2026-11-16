@@ -38,6 +38,22 @@ The tools need bash, git, rsync and jq, which current macOS ships with.
 
 Every theme change merged to main becomes a [GitHub Release](https://github.com/jnaO/herdr-jnaO-desktop-theme/releases) tagged `v<herdr>-r<n>`: the Herdr version the theme was built for, then a count that restarts at 1 for each Herdr version (`v0.1.16-r1`, `v0.1.16-r2`, `v0.1.17-r1`). Changes to docs alone cut no release. To get an e-mail for each one, use Watch → Custom → Releases on the repo page.
 
+## Staying up to date (client Macs)
+
+```sh
+tools/install --subscribe     # install the theme and the update agent
+tools/install --unsubscribe   # remove the agent only
+tools/update --rollback       # put the previous theme back
+```
+
+`--subscribe` copies the theme, runs `tools/update` once so you see its first result, then installs a launchd agent that runs it again at login, every 6 hours and whenever Herdr starts or updates. Each run fetches the release tags from GitHub over HTTPS (no account needed), picks the newest release your Herdr can run, fast-forwards this clone to it and installs it: the live theme is backed up first, and if the new one fails Herdr's checks the backup is put back and that release is skipped until a newer one comes out.
+
+A release made for a newer Herdr than yours is held, never installed early: you get one notice, and it goes in on the first run after Herdr updates. The update leaves the clone alone and installs nothing when the clone has uncommitted changes or commits of its own.
+
+Outcomes show as Herdr toasts (installed, held, rolled back, blocked, failed) and are logged to `update.log` in `${XDG_STATE_HOME:-~/.local/state}/herdr-jnaO-desktop-theme/`; a run with nothing new is silent. If Herdr isn't running, the toast appears the next time it starts. `tools/update --rollback` restores the newest backup and skips the release it replaces.
+
+A Mac that runs `--watch` publishes the theme (its sync makes local commits), so it doesn't subscribe: `--subscribe` and `--watch` each refuse while the other agent is installed.
+
 ## Working on the theme
 
 Edit the mods in the Herdr home, where Herdr reloads them as you save, then copy them into the repo:
