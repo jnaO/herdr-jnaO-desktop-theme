@@ -62,14 +62,20 @@ async function showLatest(file) {
 
 export function watchUpdates(cx) {
   if (checking()) return;
-  const dir = appHome() + "/.jnao-theme";
+  const home = appHome();
+  const dir = home + "/.jnao-theme";
   cx.spawn(async () => {
     await showLatest(dir + "/update.json");
     for (;;) {
       try {
         await watchFolder(dir);
       } catch {
-        return;
+        // No folder yet, or it was removed: wait for a change in the Herdr home.
+        try {
+          await watchFolder(home);
+        } catch {
+          return;
+        }
       }
       await showLatest(dir + "/update.json");
     }
