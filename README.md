@@ -52,6 +52,8 @@ A release made for a newer Herdr than yours is held, never installed early: you 
 
 Outcomes show as Herdr toasts (installed, held, rolled back, blocked, failed) and are logged to `update.log` in `${XDG_STATE_HOME:-~/.local/state}/herdr-jnaO-desktop-theme/`; a run with nothing new is silent. If Herdr isn't running, the toast appears the next time it starts. `tools/update --rollback` restores the newest backup and skips the release it replaces.
 
+A network filter such as Little Snitch can block git's connection to github.com when the agent runs, so `update.log` shows `failed fetch` and a "Theme update failed" toast appears; allow `git-remote-https`. See the wiki's Release-channel page, Gotchas.
+
 A Mac that runs `--watch` publishes the theme (its sync makes local commits), so it doesn't subscribe: `--subscribe` and `--watch` each refuse while the other agent is installed.
 
 ## Working on the theme
