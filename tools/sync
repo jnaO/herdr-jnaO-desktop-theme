@@ -33,21 +33,12 @@ done
 
 manifest="$REPO_ROOT/upstream/manifest.json"
 [ -f "$manifest" ] || die "no upstream/manifest.json; run tools/snapshot-upstream first"
-mkdir -p "$STATE_DIR"
 log_file="$STATE_DIR/sync.log"
 
 # One run at a time; a second run while one is going does nothing.
-lock="$STATE_DIR/lock"
-mkdir "$lock" 2>/dev/null || exit 0
-trap 'rmdir "$lock" 2>/dev/null || true' EXIT
+take_lock || exit 0
 
-# Outcome: a log line and, where possible, a macOS notification.
-announce() { # <outcome> <message>
-  echo "$(date '+%Y-%m-%d %H:%M:%S') $1 Herdr ${new_version:-?}: $2" >> "$log_file"
-  if command -v osascript >/dev/null 2>&1; then
-    osascript -e "display notification \"$2 Log: ${log_file/#$HOME/~}\" with title \"jnaO theme sync: $1\"" >/dev/null 2>&1 || true
-  fi
-}
+announce() { notify "$log_file" "$1" "Herdr ${new_version:-?}" "$2"; } # <outcome> <message>
 
 # Herdr writes its files over a moment when it starts or updates: wait until
 # installed.json and the shipped mods have been still for 5 seconds.
@@ -210,20 +201,8 @@ if [ -n "$(git -C "$REPO_ROOT" status --porcelain)" ]; then
 fi
 
 # --- Apply --------------------------------------------------------------------
-backup="$STATE_DIR/backups/$(date +%Y%m%d-%H%M%S)"
-mkdir -p "$backup/mods" "$backup/layouts"
-for m in $mods; do cp -Rp "$HERDR_HOME/mods/$m" "$backup/mods/"; done
-cp -p "$HERDR_HOME/layouts/$THEME_LAYOUT.json" "$backup/layouts/"
-ls -1d "$STATE_DIR/backups"/*/ | sort -r | tail -n +6 | while read -r old; do rm -rf "$old"; done
-
-restore() {
-  local m
-  for m in $mods; do
-    rm -rf "$HERDR_HOME/mods/$m"
-    cp -Rp "$backup/mods/$m" "$HERDR_HOME/mods/"
-  done
-  cp -p "$backup/layouts/$THEME_LAYOUT.json" "$HERDR_HOME/layouts/"
-}
+backup_theme $mods
+backup=$BACKUP
 
 mkdir -p "$stage/replaced"
 for m in $mods; do
@@ -237,20 +216,12 @@ done
 cp "$stage/layouts/$THEME_LAYOUT.json" "$HERDR_HOME/layouts/$THEME_LAYOUT.json"
 
 live_ok=1
-for m in $mods; do
-  if ! out=$(herdr-app check "$HERDR_HOME/mods/$m" 2>&1); then
-    live_ok=0; note "LIVE CHECK FAILED $m: $(echo "$out" | head -3 | tr '\n' ' ')"
-  fi
-done
-sleep 2 # hot reload
-if status=$(herdr-app status 2>/dev/null); then
-  errors=$(echo "$status" | jq -r '.errors | length' 2>/dev/null || echo 0)
-  [ "${errors:-0}" = 0 ] || { live_ok=0; note "herdr-app status reports errors: $(echo "$status" | jq -c .errors)"; }
-fi
+failed=$(live_check $mods) || live_ok=0
+if [ -n "$failed" ]; then note "$failed"; fi
 [ "${HERDR_SYNC_REHEARSE_FAILURE:-}" = 1 ] && { live_ok=0; note "rehearsed failure"; }
 
 if [ "$live_ok" = 0 ]; then
-  restore
+  restore_theme "$backup"
   announce "rolled back" "the merged theme failed after going live; the previous theme is restored from ${backup/#$HOME/~}."
   exit 1
 fi

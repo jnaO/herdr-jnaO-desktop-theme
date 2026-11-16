@@ -2,27 +2,38 @@
 # Copies the theme from the repo into the Herdr home. The layout, its mods and
 # its own colour theme (named like the layout) are replaced; any other colour
 # theme of the same name, and an existing keys.json, are kept.
-#   tools/install            copy the theme
-#   tools/install --watch    copy the theme, then install a launchd agent that
-#                            runs tools/sync whenever Herdr rewrites installed.json
-#   tools/install --unwatch  remove that launchd agent only
+#   tools/install                copy the theme
+#   tools/install --watch        copy the theme, then install a launchd agent that
+#                                runs tools/sync whenever Herdr rewrites installed.json
+#                                (the publishing Mac)
+#   tools/install --unwatch      remove that launchd agent only
+#   tools/install --subscribe    copy the theme, run tools/update once, then install
+#                                a launchd agent that runs it at login, every 6 hours
+#                                and whenever Herdr rewrites installed.json (client Macs)
+#   tools/install --unsubscribe  remove that launchd agent only
+# --watch and --subscribe each refuse while the other's agent is installed.
 set -eu
 . "$(dirname "$0")/lib.sh"
 
-LABEL="local.$(basename "$REPO_ROOT" | tr -c 'A-Za-z0-9.\n-' '-').sync"
-PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+AGENT_BASE="local.$(basename "$REPO_ROOT" | tr -c 'A-Za-z0-9.\n-' '-')"
 DOMAIN="gui/$(id -u)"
 
-unwatch() {
-  launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
-  if [ -e "$PLIST" ]; then rm "$PLIST"; fi
-  echo "removed the launchd agent $LABEL"
+plist() { echo "$HOME/Library/LaunchAgents/$AGENT_BASE.$1.plist"; } # <sync|update>
+
+remove_agent() { # <sync|update>
+  launchctl bootout "$DOMAIN/$AGENT_BASE.$1" 2>/dev/null || true
+  if [ -e "$(plist "$1")" ]; then rm "$(plist "$1")"; fi
+  echo "removed the launchd agent $AGENT_BASE.$1"
+}
+
+refuse_beside() { # <sync|update> <flag that removes it>
+  [ ! -e "$(plist "$1")" ] || die "the $AGENT_BASE.$1 agent is installed; run tools/install $2 first"
 }
 
 xml_escape() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
 
-# launchd starts jobs with a bare PATH: put the folders of the tools sync needs
-# in front of the system one.
+# launchd starts jobs with a bare PATH: put the folders of the tools the agents
+# need in front of the system one.
 job_path() {
   local sys=/usr/bin:/bin:/usr/sbin:/sbin p="" t d
   for t in herdr-app git jq; do
@@ -32,24 +43,29 @@ job_path() {
   echo "$p$sys"
 }
 
-watch() {
+# Fills tools/launchd/<kind>.plist.template, lints it and (re)loads the agent.
+add_agent() { # <sync|update> <what it runs, when>
+  local label="$AGENT_BASE.$1" file
+  file=$(plist "$1")
   need launchctl; need herdr-app; need git; need jq
-  mkdir -p "$(dirname "$PLIST")" "$STATE_DIR"
-  T_LABEL=$(xml_escape "$LABEL") T_REPO_ROOT=$(xml_escape "$REPO_ROOT") \
+  mkdir -p "$(dirname "$file")" "$STATE_DIR"
+  T_LABEL=$(xml_escape "$label") T_REPO_ROOT=$(xml_escape "$REPO_ROOT") \
   T_HERDR_HOME=$(xml_escape "$HERDR_HOME") T_STATE_DIR=$(xml_escape "$STATE_DIR") \
-  T_PATH=$(xml_escape "$(job_path)") \
-    perl -pe 's/\@([A-Z_]+)\@/$ENV{"T_$1"}/g' "$REPO_ROOT/tools/launchd/sync.plist.template" > "$PLIST"
-  plutil -lint "$PLIST" > /dev/null || die "generated plist is invalid: $PLIST"
-  launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
-  launchctl bootstrap "$DOMAIN" "$PLIST"
-  echo "installed the launchd agent $LABEL: tools/sync runs when ${HERDR_HOME/#$HOME/~}/installed.json changes"
+  T_STATE_HOME=$(xml_escape "$(dirname "$STATE_DIR")") T_PATH=$(xml_escape "$(job_path)") \
+    perl -pe 's/\@([A-Z_]+)\@/$ENV{"T_$1"}/g' "$REPO_ROOT/tools/launchd/$1.plist.template" > "$file"
+  plutil -lint "$file" > /dev/null || die "generated plist is invalid: $file"
+  launchctl bootout "$DOMAIN/$label" 2>/dev/null || true
+  launchctl bootstrap "$DOMAIN" "$file"
+  echo "installed the launchd agent $label: $2"
 }
 
 case "${1:-}" in
   "") ;;
-  --watch) ;;
-  --unwatch) unwatch; exit 0 ;;
-  *) die "usage: tools/install [--watch | --unwatch]" ;;
+  --watch) refuse_beside update --unsubscribe ;;
+  --subscribe) refuse_beside sync --unwatch ;;
+  --unwatch) remove_agent sync; exit 0 ;;
+  --unsubscribe) remove_agent update; exit 0 ;;
+  *) die "usage: tools/install [--watch | --unwatch | --subscribe | --unsubscribe]" ;;
 esac
 
 need rsync
@@ -67,5 +83,11 @@ if [ -e "$HERDR_HOME/keys.json" ]; then echo "skipped keys.json: already there (
 else cp "$REPO_ROOT/keys.json" "$HERDR_HOME/"; fi
 echo "installed the $THEME_LAYOUT layout into ${HERDR_HOME/#$HOME/~}"
 
-[ "${1:-}" = --watch ] && watch
+case "${1:-}" in
+  --watch)
+    add_agent sync "tools/sync runs when ${HERDR_HOME/#$HOME/~}/installed.json changes" ;;
+  --subscribe)
+    /bin/bash "$REPO_ROOT/tools/update" || true
+    add_agent update "tools/update runs at login, every 6 hours and when ${HERDR_HOME/#$HOME/~}/installed.json changes" ;;
+esac
 exit 0

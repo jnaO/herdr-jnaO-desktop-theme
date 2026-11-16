@@ -20,6 +20,8 @@
     <string>@PATH@</string>
     <key>HERDR_APP_HOME</key>
     <string>@HERDR_HOME@</string>
+    <key>XDG_STATE_HOME</key>
+    <string>@STATE_HOME@</string>
   </dict>
   <key>StandardOutPath</key>
   <string>@STATE_DIR@/launchd.log</string>

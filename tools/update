@@ -1,0 +1,136 @@
+#!/usr/bin/env bash
+# Installs the newest theme release this Mac's Herdr can run (client side of
+# the release channel).
+#   tools/update              fetch the release tags, fast-forward this clone to
+#                             the newest compatible one and install it
+#   tools/update --rollback   put the newest backup back and skip the release
+#                             it replaced
+# Releases are the v<herdr>-r<n> tags on the default branch of origin, fetched
+# anonymously over HTTPS ($HERDR_THEME_REMOTE replaces the URL for rehearsals)
+# into refs/herdr-update/; local tags are never considered. A release is
+# compatible when <herdr> is not newer than update-notes.json .last_run; a
+# newer one is held, with one notification per held tag. Installing backs up
+# the live theme, runs tools/install from the release's own tree, then the live
+# check; a failure restores the backup and skips that release. Each outcome is
+# logged to update.log and written to <Herdr home>/.jnao-theme/update.json,
+# which jnao-workspace-status shows as a toast.
+# HERDR_UPDATE_REHEARSE_FAILURE=1 fails the live check on purpose (rehearsals).
+# Exit: 0 nothing new, installed or held; 1 blocked, rolled back or failed.
+set -eu
+. "$(dirname "$0")/lib.sh"
+need git; need jq; need rsync; need herdr-app
+
+NS=refs/herdr-update
+log_file="$STATE_DIR/update.log"
+
+take_lock || exit 0
+
+events="$HERDR_HOME/.jnao-theme"
+
+# Outcome: an update.log line and the event file jnao-workspace-status toasts.
+# The event holds the outcome, a tag, a Herdr version and a fixed reason code only.
+announce() { # <outcome> <tag> <message> [<reason>]
+  local tag=$2 subject=${2:-${4:-?}} release_url=""
+  log_outcome "$log_file" "$1" "$subject" "$3"
+  case "${url:-}" in https://github.com/*) [ -z "$tag" ] || release_url="${url%.git}/releases/tag/$tag" ;; esac
+  mkdir -p "$events"
+  jq -n --arg id "$(date +%s)-${1// /-}-$tag" --arg outcome "$1" --arg tag "$tag" \
+    --arg herdr "${tag:+$(tag_version "$tag")}" --arg url "$release_url" --arg reason "${4:-}" \
+    '{id: $id, outcome: $outcome, tag: $tag, herdr: $herdr, url: $url, reason: $reason}' > "$events/.update.json.tmp"
+  mv "$events/.update.json.tmp" "$events/update.json"
+}
+git_() { git -C "$REPO_ROOT" "$@"; }
+tag_version() { local v=${1#v}; echo "${v%-r*}"; }
+version_le() { [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -1)" = "$1" ]; }
+read_state() { cat "$STATE_DIR/$1" 2>/dev/null || true; }
+
+if [ "${1:-}" = --rollback ]; then
+  backup=$(ls -1d "$STATE_DIR/backups"/*/ 2>/dev/null | sort -r | head -1)
+  [ -n "$backup" ] || die "no backup in ${STATE_DIR/#$HOME/~}/backups"
+  backup=${backup%/}
+  [ -f "$backup/mods.txt" ] || die "${backup/#$HOME/~} has no mods.txt; restore it by hand"
+  from=$(read_state release)
+  restore_theme "$backup"
+  cat "$backup/release" > "$STATE_DIR/release" 2>/dev/null || : > "$STATE_DIR/release"
+  if [ -n "$from" ]; then echo "$from" > "$STATE_DIR/skip"; fi
+  log_outcome "$log_file" "rolled back" "${from:-?}" "by hand, to ${backup/#$HOME/~}"
+  echo "the theme from ${backup/#$HOME/~} is back${from:+; $from is skipped until a newer release}"
+  exit 0
+fi
+[ $# -eq 0 ] || die "usage: tools/update [--rollback]"
+
+url=${HERDR_THEME_REMOTE:-$(git_ remote get-url origin)}
+case "$url" in
+  git@github.com:*) url="https://github.com/${url#git@github.com:}" ;;
+  ssh://git@github.com/*) url="https://github.com/${url#ssh://git@github.com/}" ;;
+esac
+case "$url" in https://github.com/*) url="${url%.git}.git" ;; esac
+
+if ! out=$(git_ fetch --quiet --no-tags --prune "$url" "+HEAD:$NS/head" "+refs/tags/*:$NS/tags/*" 2>&1); then
+  echo "$out" >&2
+  announce failed "" "could not fetch releases; nothing changed." fetch
+  exit 1
+fi
+
+client=$(jq -r '.last_run // empty' "$HERDR_HOME/update-notes.json" 2>/dev/null || true)
+if [ -z "$client" ]; then
+  announce blocked "" "no Herdr version in update-notes.json; start Herdr once, then run tools/update." no-herdr-version
+  exit 1
+fi
+
+newest="" candidate=""
+for t in $(git_ for-each-ref --merged "$NS/head" --sort=-v:refname --format='%(refname:strip=3)' "$NS/tags/v*-r*"); do
+  case "$t" in v[0-9]*-r[0-9]*) ;; *) continue ;; esac
+  [ -n "$newest" ] || newest=$t
+  if version_le "$(tag_version "$t")" "$client"; then candidate=$t; break; fi
+done
+[ -n "$newest" ] || exit 0
+
+if [ "$newest" != "$candidate" ] && [ "$(read_state held)" != "$newest" ]; then
+  echo "$newest" > "$STATE_DIR/held"
+  announce held "$newest" "waiting for Herdr $(tag_version "$newest"); this Mac runs Herdr $client."
+fi
+installed=$(read_state release)
+if [ -z "$candidate" ] || [ "$candidate" = "$installed" ] || [ "$candidate" = "$(read_state skip)" ]; then exit 0; fi
+
+commit=$(git_ rev-parse --verify --quiet "$NS/tags/$candidate^{commit}")
+if [ -n "$(git_ status --porcelain)" ]; then
+  announce blocked "$candidate" "the clone has uncommitted changes; commit or stash them, then run tools/update." dirty
+  exit 1
+fi
+if git_ merge-base --is-ancestor HEAD "$commit"; then
+  git_ merge --ff-only --quiet "$commit"
+elif ! git_ merge-base --is-ancestor "$commit" HEAD; then
+  announce blocked "$candidate" "the clone has commits that $candidate does not; reset it to origin, then run tools/update." diverged
+  exit 1
+fi
+
+# The folder exists before install, so the reloaded mod's watch sees the event.
+mkdir -p "$events"
+tree="$STATE_DIR/release-tree"
+rm -rf "$tree"; mkdir -p "$tree"
+# -m: archived files carry the commit time; fresh mtimes keep install's rsync
+# from skipping a changed file of the same size.
+git_ archive "$commit" | tar -x -m -C "$tree"
+
+mods=$( { if [ -f "$HERDR_HOME/layouts/$THEME_LAYOUT.json" ]; then theme_mods "$HERDR_HOME" | tr ' ' '\n'; fi
+          for d in "$tree/mods"/*/; do basename "$d"; done; } | sort -u)
+backup_theme $mods
+
+ok=1
+/bin/bash "$tree/tools/install" || ok=0
+if [ "$ok" = 1 ]; then
+  failed=$(live_check $(theme_mods "$HERDR_HOME")) || ok=0
+  if [ -n "$failed" ]; then echo "$failed"; fi
+fi
+if [ "${HERDR_UPDATE_REHEARSE_FAILURE:-}" = 1 ]; then ok=0; echo "rehearsed failure"; fi
+
+if [ "$ok" = 0 ]; then
+  restore_theme "$BACKUP"
+  echo "$candidate" > "$STATE_DIR/skip"
+  announce "rolled back" "$candidate" "$candidate failed after going live; the previous theme is restored from ${BACKUP/#$HOME/~}."
+  exit 1
+fi
+echo "$candidate" > "$STATE_DIR/release"
+rm -f "$STATE_DIR/skip"
+announce installed "$candidate" "the theme is now $candidate (built for Herdr $(tag_version "$candidate"))."

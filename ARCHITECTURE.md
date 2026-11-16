@@ -11,6 +11,7 @@ A Herdr desktop theme (layout, mods, colour theme) laid out like the Herdr home,
 | [Theme composition](https://github.com/jnaO/herdr-jnaO-desktop-theme/wiki/Theme-composition) | what counts as the theme, export/install/snapshot rules, Herdr constraints (no overrides, flat mods, clone renames) |
 | [Sync engine](https://github.com/jnaO/herdr-jnaO-desktop-theme/wiki/Sync-engine) | `tools/sync`: trigger, 3-way merge rules, apply/rollback, state folder, rehearsals |
 | [Privacy gate](https://github.com/jnaO/herdr-jnaO-desktop-theme/wiki/Privacy-gate) | `tools/privacy-check`, the hook and CI; anything that could publish a path |
+| [Release channel](https://github.com/jnaO/herdr-jnaO-desktop-theme/wiki/Release-channel) | anything that cuts or consumes a release: tag scheme, which paths count, the client updater |
 
 The wiki is its own git repo (`herdr-jnaO-desktop-theme.wiki.git`); edit pages there and keep this map's links in step.
 
@@ -20,6 +21,7 @@ The wiki is its own git repo (`herdr-jnaO-desktop-theme.wiki.git`); edit pages t
 layouts/jnaO.json          THE theme root; every mod and colour theme is found from it
 mods/jnao-*/               cloned Herdr mods (flat: folder name = mod name)
   jnao-spaces/machine.js   machine glyph/tint/header helper; identical copy in jnao-agents/
+  jnao-workspace-status/updates.js  tools/update's event file as toasts, once per id via shared(); original file (no header)
 themes/jnaO.json           the layout's own colour theme (named like the layout)
 keys.json                  reference key bindings; install never overwrites the user's
 upstream/                  unmodified Herdr sources the clones were built from = merge base
@@ -29,14 +31,18 @@ preview.png                herdr.dev share screenshot
 assets/banner.svg          README / wiki banner
 tools/lib.sh               shared paths and theme discovery; sourced by every tool
 tools/export               Herdr home → repo (mirror; version-guarded)
-tools/install              repo → Herdr home (keeps keys.json and foreign same-named themes); --watch / --unwatch manage the launchd agent
+tools/install              repo → Herdr home (keeps keys.json and foreign same-named themes); --watch / --unwatch (sync agent, publisher) and --subscribe / --unsubscribe (update agent, client) manage the launchd agents, exclusive per clone
 tools/snapshot-upstream    shipped sources → upstream/ (--from <home> for rehearsals)
 tools/radius               2px corner rule over mod .js files; idempotent
 tools/sync                 re-merge onto a new Herdr release; --dry-run stages only
+tools/update               client updater: fetch release tags, fast-forward, install the newest release this Herdr can run; --rollback
 tools/launchd/sync.plist.template  launchd agent (WatchPaths installed.json → tools/sync); @PLACEHOLDER@s only, filled by install --watch
+tools/launchd/update.plist.template  launchd agent (RunAtLoad, every 6 h, WatchPaths installed.json → tools/update); filled by install --subscribe
+tools/next-release         next v<herdr>-r<n> tag for HEAD, or nothing; --notes prints the release notes
 tools/privacy-check        public-repo gate: path forms, $HOME, hostname, git email
 tools/hooks/pre-commit     runs privacy-check --staged (core.hooksPath tools/hooks)
 .github/workflows/privacy.yml  privacy-check on push and PR
+.github/workflows/release.yml  on push to main: privacy-check, then gh release create $(tools/next-release)
 LICENSE, NOTICE            Apache-2.0; NOTICE credits Herdr for mods/, layouts/, upstream/
 ```
 
@@ -46,12 +52,18 @@ LICENSE, NOTICE            Apache-2.0; NOTICE credits Herdr for mods/, layouts/,
 |---|---|
 | `HERDR_HOME` | `$HERDR_APP_HOME`, else `~/.config/herdr-app` |
 | `REPO_ROOT` | the repo, from the script's own location |
-| `STATE_DIR` | `${XDG_STATE_HOME:-~/.local/state}/herdr-jnaO-desktop-theme`: sync log, staging, backups, lock, launchd.log |
+| `STATE_DIR` | `${XDG_STATE_HOME:-~/.local/state}/herdr-jnaO-desktop-theme`: sync.log, update.log, staging, backups, lock, release/held/skip, release-tree, launchd.log |
 | `THEME_LAYOUT` | the one place the theme name lives |
 | `theme_mods <home>` | every cloned mod reachable from the layout (layout refs, then `mod: "…"` refs inside mods) |
 | `theme_colors <home>` | colour themes the layout's `theme` names, minus Herdr presets |
 | `cloned_from <json> <field>` | `name` / `version` of a clone, empty when not a clone |
 | `RSYNC_EXCLUDES` | Herdr-generated files never copied (`*.d.ts`, `jsconfig.json`) |
+| `take_lock` | the one `mkdir` lock in `STATE_DIR` shared by sync and update, released on exit; returns 1 when held |
+| `log_outcome <log> <outcome> <subject> <message>` | one timestamped outcome line |
+| `notify <log> <outcome> <subject> <message>` | `log_outcome` plus a macOS notification titled `jnaO theme <tool>: <outcome>` (sync only; update writes a toast event) |
+| `backup_theme <mods…>` | sets `BACKUP` to a new `backups/<timestamp>/` with those mods, the layout, its colour theme, `mods.txt` and `release`; keeps the newest five |
+| `restore_theme <backup>` | removes every mod in `mods.txt`, the layout and the colour theme from the home, then copies back what the backup holds |
+| `live_check <mods…>` | `herdr-app check` per live mod plus `herdr-app status` `.errors`; prints failures, returns 1 on any |
 
 ## Patterns
 
