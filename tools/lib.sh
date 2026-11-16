@@ -4,7 +4,7 @@
 HERDR_HOME="${HERDR_APP_HOME:-$HOME/.config/herdr-app}"
 REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 
-# Where tools/sync keeps its log, staging copy, backups and lock.
+# Where the tools keep their logs, staging copy, backups, lock and installed release.
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/herdr-jnaO-desktop-theme"
 
 # The theme is one layout; the mods and colour themes it ships are found by
@@ -48,4 +48,80 @@ theme_mods() {
     queue="$queue $(cat "$home/mods/$n"/*.js | mod_refs | tr '\n' ' ')"
   done
   echo $found
+}
+
+# --- Applying a theme to the live home (tools/sync, tools/update) -------------
+
+# One run at a time across the tools: a mkdir lock in the state folder, removed
+# on exit. Returns 1 when another run holds it.
+take_lock() {
+  mkdir -p "$STATE_DIR"
+  mkdir "$STATE_DIR/lock" 2>/dev/null || return 1
+  trap 'rmdir "$STATE_DIR/lock" 2>/dev/null || true' EXIT
+}
+
+# Outcome: a log line and, where possible, a macOS notification titled
+# "jnaO theme <tool>: <outcome>".
+notify() { # <log> <outcome> <subject> <message>
+  echo "$(date '+%Y-%m-%d %H:%M:%S') $2 $3: $4" >> "$1"
+  if command -v osascript >/dev/null 2>&1; then
+    osascript -e "display notification \"$4 Log: ${1/#$HOME/~}\" with title \"jnaO theme $(basename "$0"): $2\"" >/dev/null 2>&1 || true
+  fi
+}
+
+# Copies the named mods, the layout and its colour theme from the live home into
+# a new $STATE_DIR/backups/<timestamp>/ and sets BACKUP to it. mods.txt lists
+# every named mod, held or not; release holds $STATE_DIR/release. The newest
+# five backups are kept.
+backup_theme() { # <mods…>
+  local m f
+  mkdir -p "$STATE_DIR/backups"
+  BACKUP="$STATE_DIR/backups/$(date +%Y%m%d-%H%M%S)"
+  f=$BACKUP
+  m=1
+  while ! mkdir "$BACKUP" 2>/dev/null; do BACKUP="$f-$m"; m=$((m + 1)); done
+  mkdir -p "$BACKUP/mods" "$BACKUP/layouts" "$BACKUP/themes"
+  : > "$BACKUP/mods.txt"
+  for m in "$@"; do
+    echo "$m" >> "$BACKUP/mods.txt"
+    if [ -d "$HERDR_HOME/mods/$m" ]; then cp -Rp "$HERDR_HOME/mods/$m" "$BACKUP/mods/"; fi
+  done
+  for f in "layouts/$THEME_LAYOUT.json" "themes/$THEME_LAYOUT.json"; do
+    if [ -f "$HERDR_HOME/$f" ]; then cp -p "$HERDR_HOME/$f" "$BACKUP/$f"; fi
+  done
+  { cat "$STATE_DIR/release" 2>/dev/null || true; } > "$BACKUP/release"
+  ls -1d "$STATE_DIR/backups"/*/ | sort -r | tail -n +6 | while read -r f; do rm -rf "$f"; done
+}
+
+# Puts a backup_theme folder back: every mod in its mods.txt, the layout and the
+# colour theme are removed from the live home, then the ones it holds are copied in.
+restore_theme() { # <backup>
+  local m f
+  while read -r m; do
+    [ -n "$m" ] || continue
+    rm -rf "$HERDR_HOME/mods/$m"
+    if [ -d "$1/mods/$m" ]; then cp -Rp "$1/mods/$m" "$HERDR_HOME/mods/"; fi
+  done < "$1/mods.txt"
+  for f in "layouts/$THEME_LAYOUT.json" "themes/$THEME_LAYOUT.json"; do
+    rm -f "$HERDR_HOME/$f"
+    if [ -f "$1/$f" ]; then cp -p "$1/$f" "$HERDR_HOME/$f"; fi
+  done
+}
+
+# herdr-app check on each named live mod, then herdr-app status .errors after
+# the hot reload (skipped when no window answers). Prints one line per failure;
+# returns 1 on any.
+live_check() { # <mods…>
+  local m out status errors ok=0
+  for m in "$@"; do
+    if ! out=$(herdr-app check "$HERDR_HOME/mods/$m" 2>&1); then
+      ok=1; echo "LIVE CHECK FAILED $m: $(echo "$out" | head -3 | tr '\n' ' ')"
+    fi
+  done
+  sleep 2
+  if status=$(herdr-app status 2>/dev/null); then
+    errors=$(echo "$status" | jq -r '.errors | length' 2>/dev/null || echo 0)
+    if [ "${errors:-0}" != 0 ]; then ok=1; echo "herdr-app status reports errors: $(echo "$status" | jq -c .errors)"; fi
+  fi
+  return $ok
 }
