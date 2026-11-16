@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Prints the next release tag for HEAD, v<herdr>-r<n>, or nothing when HEAD
+# changes none of the release paths since the previous release tag.
+#   tools/next-release           the tag
+#   tools/next-release --notes   the release notes
+# <herdr> is upstream/manifest.json .version; <n> counts the tags already cut
+# for that version, plus one.
+set -eu
+. "$(dirname "$0")/lib.sh"
+need git; need jq
+
+RELEASE_PATHS="layouts mods themes keys.json upstream tools"
+
+version=$(jq -r '.version // empty' "$REPO_ROOT/upstream/manifest.json")
+[ -n "$version" ] || die "no version in upstream/manifest.json"
+prev=$(git -C "$REPO_ROOT" describe --tags --abbrev=0 --match 'v*-r*' HEAD 2>/dev/null || true)
+
+case "${1:-}" in
+  "")
+    if [ -n "$prev" ] && git -C "$REPO_ROOT" diff --quiet "$prev" HEAD -- $RELEASE_PATHS; then exit 0; fi
+    n=$(git -C "$REPO_ROOT" tag -l "v$version-r*" | sed -n "s/^v$version-r\([0-9][0-9]*\)\$/\1/p" | sort -n | tail -1)
+    echo "v$version-r$(( ${n:-0} + 1 ))"
+    ;;
+  --notes)
+    echo "Herdr $version"
+    echo
+    git -C "$REPO_ROOT" log --no-merges --format='- %s' "${prev:+$prev..}HEAD" -- $RELEASE_PATHS
+    ;;
+  *) die "usage: tools/next-release [--notes]" ;;
+esac

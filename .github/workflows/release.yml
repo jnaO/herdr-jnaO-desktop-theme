@@ -1,0 +1,28 @@
+name: release
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+concurrency:
+  group: release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - run: tools/privacy-check
+      - name: Cut the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          tag=$(tools/next-release)
+          if [ -z "$tag" ]; then echo "nothing to release"; exit 0; fi
+          version=${tag#v}; version=${version%-r*}
+          gh release create "$tag" --target "$GITHUB_SHA" \
+            --title "jnaO theme for Herdr $version (r${tag##*-r})" \
+            --notes-file <(tools/next-release --notes)
