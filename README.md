@@ -34,6 +34,10 @@ To uninstall, delete `layouts/jnaO.json` and the `mods/jnao-*` folders from the 
 
 The tools need bash, git, rsync and jq, which current macOS ships with.
 
+## Releases
+
+Every theme change merged to main becomes a [GitHub Release](https://github.com/jnaO/herdr-jnaO-desktop-theme/releases) tagged `v<herdr>-r<n>`: the Herdr version the theme was built for, then a count that restarts at 1 for each Herdr version (`v0.1.16-r1`, `v0.1.16-r2`, `v0.1.17-r1`). Changes to docs alone cut no release. To get an e-mail for each one, use Watch → Custom → Releases on the repo page.
+
 ## Working on the theme
 
 Edit the mods in the Herdr home, where Herdr reloads them as you save, then copy them into the repo:

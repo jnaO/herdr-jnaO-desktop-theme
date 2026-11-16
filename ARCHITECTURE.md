@@ -11,6 +11,7 @@ A Herdr desktop theme (layout, mods, colour theme) laid out like the Herdr home,
 | [Theme composition](https://github.com/jnaO/herdr-jnaO-desktop-theme/wiki/Theme-composition) | what counts as the theme, export/install/snapshot rules, Herdr constraints (no overrides, flat mods, clone renames) |
 | [Sync engine](https://github.com/jnaO/herdr-jnaO-desktop-theme/wiki/Sync-engine) | `tools/sync`: trigger, 3-way merge rules, apply/rollback, state folder, rehearsals |
 | [Privacy gate](https://github.com/jnaO/herdr-jnaO-desktop-theme/wiki/Privacy-gate) | `tools/privacy-check`, the hook and CI; anything that could publish a path |
+| [Release channel](https://github.com/jnaO/herdr-jnaO-desktop-theme/wiki/Release-channel) | anything that cuts or consumes a release: tag scheme, which paths count, the client updater |
 
 The wiki is its own git repo (`herdr-jnaO-desktop-theme.wiki.git`); edit pages there and keep this map's links in step.
 
@@ -34,9 +35,11 @@ tools/snapshot-upstream    shipped sources → upstream/ (--from <home> for rehe
 tools/radius               2px corner rule over mod .js files; idempotent
 tools/sync                 re-merge onto a new Herdr release; --dry-run stages only
 tools/launchd/sync.plist.template  launchd agent (WatchPaths installed.json → tools/sync); @PLACEHOLDER@s only, filled by install --watch
+tools/next-release         next v<herdr>-r<n> tag for HEAD, or nothing; --notes prints the release notes
 tools/privacy-check        public-repo gate: path forms, $HOME, hostname, git email
 tools/hooks/pre-commit     runs privacy-check --staged (core.hooksPath tools/hooks)
 .github/workflows/privacy.yml  privacy-check on push and PR
+.github/workflows/release.yml  on push to main: privacy-check, then gh release create $(tools/next-release)
 LICENSE, NOTICE            Apache-2.0; NOTICE credits Herdr for mods/, layouts/, upstream/
 ```
 
