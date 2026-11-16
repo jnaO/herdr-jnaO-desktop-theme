@@ -55,6 +55,11 @@ LICENSE, NOTICE            Apache-2.0; NOTICE credits Herdr for mods/, layouts/,
 | `theme_colors <home>` | colour themes the layout's `theme` names, minus Herdr presets |
 | `cloned_from <json> <field>` | `name` / `version` of a clone, empty when not a clone |
 | `RSYNC_EXCLUDES` | Herdr-generated files never copied (`*.d.ts`, `jsconfig.json`) |
+| `take_lock` | the one `mkdir` lock in `STATE_DIR` shared by sync and update, released on exit; returns 1 when held |
+| `notify <log> <outcome> <subject> <message>` | a log line plus a notification titled `jnaO theme <tool>: <outcome>` |
+| `backup_theme <mods…>` | sets `BACKUP` to a new `backups/<timestamp>/` with those mods, the layout, its colour theme, `mods.txt` and `release`; keeps the newest five |
+| `restore_theme <backup>` | removes every mod in `mods.txt`, the layout and the colour theme from the home, then copies back what the backup holds |
+| `live_check <mods…>` | `herdr-app check` per live mod plus `herdr-app status` `.errors`; prints failures, returns 1 on any |
 
 ## Patterns
 
