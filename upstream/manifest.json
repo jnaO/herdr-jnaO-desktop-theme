@@ -1,5 +1,5 @@
 {
-  "version": "0.1.15",
+  "version": "0.1.16",
   "hashes": {
     "workspace-chrome": {
       "archive.svg": "2cce972bb43c2514",
@@ -37,15 +37,15 @@
       "x.svg": "b371ad85aff6b5ff"
     },
     "spaces": {
-      "main.js": "b53526708eb1ddab",
+      "main.js": "bbcc823778bd7475",
       "mod.json": "4a42ed2202338077"
     },
     "agents": {
-      "main.js": "292e8b6f8ff61305",
+      "main.js": "44dae8af5090bc74",
       "mod.json": "c1d087260ba7b076"
     },
     "tabs": {
-      "main.js": "c5e6c89ffea5c47a",
+      "main.js": "ff113941edac1a02",
       "mod.json": "a504d5ac991bc4cc",
       "win-close.svg": "ca74932a6d3f1a90",
       "win-max.svg": "4bbb4fb6a79ab51d",
